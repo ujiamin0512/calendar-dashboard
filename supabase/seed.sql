@@ -1,10 +1,11 @@
 -- ====================================================================
--- SEED DATA FOR NEON SQL CONSOLE
+-- SEED DATA FOR SUPABASE / POSTGRESQL CONSOLE
 -- Run this after running schema.sql to insert sample projects & interns
+-- All tables are namespaced with "dashboard_" prefix
 -- ====================================================================
 
 -- 1. Insert Interns & Trainers
-INSERT INTO users (id, email, full_name, role, phone, daily_capacity, skills)
+INSERT INTO dashboard_users (id, email, full_name, role, phone, daily_capacity, skills)
 VALUES 
   ('a1111111-1111-1111-1111-111111111111', 'elena.rostova@traininghub.internal', 'Elena Rostova', 'intern', '+1-555-0101', 5, ARRAY['Slide QA', 'Agenda Timekeeping', 'Speaker Liaison']),
   ('b2222222-2222-2222-2222-222222222222', 'kenji.t@traininghub.internal', 'Kenji Takahashi', 'intern', '+1-555-0102', 4, ARRAY['AV Setup', 'Zoom Rooms', 'Microphones']),
@@ -13,7 +14,7 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- 2. Insert Training Projects
-INSERT INTO projects (id, name, d_day, company_name, slogan, training_provider, storage_url, location, attendees_count, status)
+INSERT INTO dashboard_projects (id, name, d_day, company_name, slogan, training_provider, storage_url, location, attendees_count, status)
 VALUES 
   (
     '11111111-1111-1111-1111-111111111111', 
@@ -54,7 +55,7 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- 3. Insert Checklist Tasks
-INSERT INTO checklist_tasks (id, project_id, title, description, assigned_intern_id, state, priority, phase, due_date, estimated_minutes, review_notes)
+INSERT INTO dashboard_checklist_tasks (id, project_id, title, description, assigned_intern_id, state, priority, phase, due_date, estimated_minutes, review_notes)
 VALUES
   -- Urgent Project 1 (D-3)
   (

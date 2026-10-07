@@ -1,6 +1,7 @@
 -- ====================================================================
--- ALL-IN-ONE NEON POSTGRESQL INITIALIZATION (SCHEMA + SEED DATA)
--- Copy and paste this entire file directly into Neon SQL Editor & Click Run
+-- ALL-IN-ONE SUPABASE / POSTGRESQL INITIALIZATION (SCHEMA + SEED DATA)
+-- Copy and paste this entire file directly into Supabase SQL Editor & Click Run
+-- All tables are namespaced with "dashboard_" prefix
 -- ====================================================================
 
 -- ====================================================================
@@ -39,7 +40,7 @@ END $$;
 -- ====================================================================
 
 -- 1. Users Table
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE IF NOT EXISTS dashboard_users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email VARCHAR(255) UNIQUE NOT NULL,
     full_name VARCHAR(150) NOT NULL,
@@ -54,7 +55,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- 2. Projects Table
-CREATE TABLE IF NOT EXISTS projects (
+CREATE TABLE IF NOT EXISTS dashboard_projects (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
     d_day DATE NOT NULL,
@@ -67,18 +68,18 @@ CREATE TABLE IF NOT EXISTS projects (
     attendees_count INT DEFAULT 0,
     status project_status_enum NOT NULL DEFAULT 'in_progress',
     notes TEXT,
-    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_by UUID REFERENCES dashboard_users(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- 3. Checklist Tasks Table
-CREATE TABLE IF NOT EXISTS checklist_tasks (
+CREATE TABLE IF NOT EXISTS dashboard_checklist_tasks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    project_id UUID NOT NULL REFERENCES dashboard_projects(id) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
     description TEXT,
-    assigned_intern_id UUID REFERENCES users(id) ON DELETE SET NULL, -- NULL = Master Backlog
+    assigned_intern_id UUID REFERENCES dashboard_users(id) ON DELETE SET NULL, -- NULL = Master Backlog
     state task_state_enum NOT NULL DEFAULT 'not_started',
     priority task_priority_enum NOT NULL DEFAULT 'medium',
     phase VARCHAR(100) NOT NULL DEFAULT 'Curriculum & Slides',
@@ -93,10 +94,10 @@ CREATE TABLE IF NOT EXISTS checklist_tasks (
 );
 
 -- 4. Task Reviews Audit Table
-CREATE TABLE IF NOT EXISTS task_reviews (
+CREATE TABLE IF NOT EXISTS dashboard_task_reviews (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    task_id UUID NOT NULL REFERENCES checklist_tasks(id) ON DELETE CASCADE,
-    reviewed_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    task_id UUID NOT NULL REFERENCES dashboard_checklist_tasks(id) ON DELETE CASCADE,
+    reviewed_by UUID NOT NULL REFERENCES dashboard_users(id) ON DELETE CASCADE,
     decision VARCHAR(50) NOT NULL,
     feedback_notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -106,16 +107,16 @@ CREATE TABLE IF NOT EXISTS task_reviews (
 -- PART 3: INDEXES & REAL-TIME ALGORITHMIC HEALTH VIEW
 -- ====================================================================
 
-CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON checklist_tasks(project_id);
-CREATE INDEX IF NOT EXISTS idx_tasks_assigned_intern ON checklist_tasks(assigned_intern_id);
-CREATE INDEX IF NOT EXISTS idx_tasks_state ON checklist_tasks(state);
-CREATE INDEX IF NOT EXISTS idx_projects_d_day ON projects(d_day);
-CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status);
-CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+CREATE INDEX IF NOT EXISTS idx_dashboard_tasks_project_id ON dashboard_checklist_tasks(project_id);
+CREATE INDEX IF NOT EXISTS idx_dashboard_tasks_assigned_intern ON dashboard_checklist_tasks(assigned_intern_id);
+CREATE INDEX IF NOT EXISTS idx_dashboard_tasks_state ON dashboard_checklist_tasks(state);
+CREATE INDEX IF NOT EXISTS idx_dashboard_projects_d_day ON dashboard_projects(d_day);
+CREATE INDEX IF NOT EXISTS idx_dashboard_projects_status ON dashboard_projects(status);
+CREATE INDEX IF NOT EXISTS idx_dashboard_users_role ON dashboard_users(role);
 
 -- Algorithmic Health Score Real-Time View
 -- Health Score = Days until D-Day ÷ Remaining Tasks
-CREATE OR REPLACE VIEW view_project_health_scores AS
+CREATE OR REPLACE VIEW dashboard_view_project_health_scores AS
 WITH task_aggregates AS (
     SELECT 
         p.id AS project_id,
@@ -131,8 +132,8 @@ WITH task_aggregates AS (
         COUNT(t.id) AS total_tasks,
         COUNT(CASE WHEN t.state = 'completed' THEN 1 END) AS completed_tasks,
         COUNT(CASE WHEN t.state != 'completed' THEN 1 END) AS remaining_tasks
-    FROM projects p
-    LEFT JOIN checklist_tasks t ON t.project_id = p.id
+    FROM dashboard_projects p
+    LEFT JOIN dashboard_checklist_tasks t ON t.project_id = p.id
     GROUP BY p.id, p.name, p.d_day, p.company_name, p.slogan, p.training_provider, p.storage_url, p.evaluation_qr_code_url, p.status
 )
 SELECT 
@@ -168,7 +169,10 @@ SELECT
 FROM task_aggregates
 ORDER BY health_score ASC;
 
--- Automatic Timestamp Function
+-- ====================================================================
+-- PART 4: TRIGGERS (AUTOMATIC TIMESTAMPS)
+-- ====================================================================
+
 CREATE OR REPLACE FUNCTION trigger_set_timestamp()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -177,21 +181,21 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS set_timestamp_users ON users;
-CREATE TRIGGER set_timestamp_users BEFORE UPDATE ON users FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
+DROP TRIGGER IF EXISTS set_timestamp_dashboard_users ON dashboard_users;
+CREATE TRIGGER set_timestamp_dashboard_users BEFORE UPDATE ON dashboard_users FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
 
-DROP TRIGGER IF EXISTS set_timestamp_projects ON projects;
-CREATE TRIGGER set_timestamp_projects BEFORE UPDATE ON projects FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
+DROP TRIGGER IF EXISTS set_timestamp_dashboard_projects ON dashboard_projects;
+CREATE TRIGGER set_timestamp_dashboard_projects BEFORE UPDATE ON dashboard_projects FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
 
-DROP TRIGGER IF EXISTS set_timestamp_tasks ON checklist_tasks;
-CREATE TRIGGER set_timestamp_tasks BEFORE UPDATE ON checklist_tasks FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
+DROP TRIGGER IF EXISTS set_timestamp_dashboard_tasks ON dashboard_checklist_tasks;
+CREATE TRIGGER set_timestamp_dashboard_tasks BEFORE UPDATE ON dashboard_checklist_tasks FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
 
 -- ====================================================================
--- PART 4: SEED DATA INSERTION
+-- PART 5: SEED DATA
 -- ====================================================================
 
--- Insert Sample Team
-INSERT INTO users (id, email, full_name, role, phone, daily_capacity, skills)
+-- Insert Users (Interns + Trainers)
+INSERT INTO dashboard_users (id, email, full_name, role, phone, daily_capacity, skills)
 VALUES 
   ('a1111111-1111-1111-1111-111111111111', 'elena.rostova@traininghub.internal', 'Elena Rostova', 'intern', '+1-555-0101', 5, ARRAY['Slide QA', 'Agenda Timekeeping', 'Speaker Liaison']),
   ('b2222222-2222-2222-2222-222222222222', 'kenji.t@traininghub.internal', 'Kenji Takahashi', 'intern', '+1-555-0102', 4, ARRAY['AV Setup', 'Zoom Rooms', 'Microphones']),
@@ -199,8 +203,8 @@ VALUES
   ('d4444444-4444-4444-4444-444444444444', 'admin.marcus@traininghub.internal', 'Marcus Trainer (Admin)', 'admin', '+1-555-0100', 8, ARRAY['Curriculum Lead', 'Reviewer'])
 ON CONFLICT (id) DO NOTHING;
 
--- Insert Projects (Urgent, Moderate, Upcoming)
-INSERT INTO projects (id, name, d_day, company_name, slogan, training_provider, storage_url, location, attendees_count, status)
+-- Insert Projects
+INSERT INTO dashboard_projects (id, name, d_day, company_name, slogan, training_provider, storage_url, location, attendees_count, status)
 VALUES 
   (
     '11111111-1111-1111-1111-111111111111', 
@@ -240,8 +244,8 @@ VALUES
   )
 ON CONFLICT (id) DO NOTHING;
 
--- Insert Checklist Tasks
-INSERT INTO checklist_tasks (id, project_id, title, description, assigned_intern_id, state, priority, phase, due_date, estimated_minutes, review_notes)
+-- Insert Tasks
+INSERT INTO dashboard_checklist_tasks (id, project_id, title, description, assigned_intern_id, state, priority, phase, due_date, estimated_minutes, review_notes)
 VALUES
   (
     'e1111111-0001-0000-0000-000000000001',
@@ -274,7 +278,7 @@ VALUES
     '11111111-1111-1111-1111-111111111111', 
     'Confirm Catering Headcount & Dietary Requirements', 
     'Provide final VIP dietary restrictions to venue hotel.', 
-    NULL, -- Master Backlog
+    NULL, 
     'not_started', 
     'urgent', 
     'Logistics & Venue', 
@@ -313,7 +317,7 @@ VALUES
     '22222222-2222-2222-2222-222222222222', 
     'Reserve Extension Cords & High-Speed LAN Hubs', 
     'Secure 10 surge-protected power strips and switch boxes.', 
-    NULL, -- Master Backlog
+    NULL, 
     'not_started', 
     'medium', 
     'Logistics & Venue', 
@@ -336,6 +340,12 @@ VALUES
   )
 ON CONFLICT (id) DO NOTHING;
 
--- Verification query
-SELECT project_id, name, d_day, days_until_d_day, total_tasks, remaining_tasks, health_score, urgency_level
-FROM view_project_health_scores;
+-- Verification Query
+SELECT 
+    name, 
+    d_day, 
+    days_until_d_day, 
+    remaining_tasks, 
+    health_score, 
+    urgency_level 
+FROM dashboard_view_project_health_scores;

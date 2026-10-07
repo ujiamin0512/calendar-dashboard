@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   Database, Copy, Check, Download, Terminal, 
-  ExternalLink, Code2, Server, Shield, FileText 
+  ExternalLink, Server, Shield
 } from 'lucide-react';
 import { 
   NEON_POSTGRES_SCHEMA_SQL, 
@@ -11,7 +11,7 @@ import {
 } from '../utils/neonSql';
 
 export const NeonSqlModal: React.FC<{ isOpen?: boolean; onClose?: () => void }> = () => {
-  const [activeTab, setActiveTab] = useState<'sql-ddl' | 'seed-sql' | 'drizzle' | 'nextjs-actions'>('sql-ddl');
+  const [activeTab, setActiveTab] = useState<'sql-ddl' | 'seed-sql' | 'drizzle' | 'supabase-client'>('sql-ddl');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   const handleCopy = (text: string, key: string) => {
@@ -26,7 +26,7 @@ export const NeonSqlModal: React.FC<{ isOpen?: boolean; onClose?: () => void }> 
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'trainer_dashboard_neon_schema.sql';
+    a.download = 'trainer_dashboard_supabase_schema.sql';
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -43,14 +43,14 @@ export const NeonSqlModal: React.FC<{ isOpen?: boolean; onClose?: () => void }> 
             <div>
               <div className="flex items-center space-x-2">
                 <h1 className="text-xl font-bold text-zinc-900 tracking-tight">
-                  Neon PostgreSQL & Next.js Implementation Blueprint
+                  Supabase / PostgreSQL Implementation Blueprint
                 </h1>
                 <span className="text-xs font-mono px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md font-semibold">
-                  PostgreSQL 15+ & Vercel Ready
+                  PostgreSQL 15+ & Supabase Ready
                 </span>
               </div>
               <p className="text-xs text-zinc-500 mt-1">
-                Production schema for Project Tasks, Intern/Admin Roles, and dynamic Health Score calculation. Run directly in your Neon SQL Editor console.
+                Production schema for <code className="font-mono text-zinc-700">dashboard_projects</code>, <code className="font-mono text-zinc-700">dashboard_checklist_tasks</code>, <code className="font-mono text-zinc-700">dashboard_users</code>, and dynamic Health Score calculation. Run directly in your Supabase SQL Editor.
               </p>
             </div>
           </div>
@@ -64,12 +64,12 @@ export const NeonSqlModal: React.FC<{ isOpen?: boolean; onClose?: () => void }> 
               <span>Download .sql</span>
             </button>
             <a
-              href="https://console.neon.tech"
+              href="https://supabase.com/dashboard"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center space-x-1.5 px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 text-white rounded-lg text-xs font-medium transition-colors shadow-xs"
+              className="flex items-center space-x-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium transition-colors shadow-xs"
             >
-              <span>Open Neon Console</span>
+              <span>Open Supabase</span>
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
           </div>
@@ -83,7 +83,7 @@ export const NeonSqlModal: React.FC<{ isOpen?: boolean; onClose?: () => void }> 
               <span>User Roles & RBAC</span>
             </div>
             <p className="text-xs text-zinc-500">
-              <span className="font-mono text-zinc-800 font-semibold">admin</span>, <span className="font-mono text-zinc-800 font-semibold">lead_trainer</span>, <span className="font-mono text-zinc-800 font-semibold">intern</span>, and <span className="font-mono text-zinc-800 font-semibold">viewer</span> enums with daily capacity meters and skill arrays.
+              <span className="font-mono text-zinc-800 font-semibold">dashboard_users</span> table with <span className="font-mono text-zinc-800 font-semibold">admin</span>, <span className="font-mono text-zinc-800 font-semibold">lead_trainer</span>, <span className="font-mono text-zinc-800 font-semibold">intern</span>, and <span className="font-mono text-zinc-800 font-semibold">viewer</span> enums.
             </p>
           </div>
 
@@ -93,17 +93,17 @@ export const NeonSqlModal: React.FC<{ isOpen?: boolean; onClose?: () => void }> 
               <span>Algorithmic Health View</span>
             </div>
             <p className="text-xs text-zinc-500">
-              Real-time PostgreSQL view <span className="font-mono text-zinc-800">view_project_health_scores</span> computing <code className="bg-zinc-100 px-1 py-0.5 rounded text-[11px] font-mono">D-Days ÷ Remaining Tasks</code> automatically.
+              Real-time view <span className="font-mono text-zinc-800">dashboard_view_project_health_scores</span> computing <code className="bg-zinc-100 px-1 py-0.5 rounded text-[11px] font-mono">D-Days ÷ Remaining Tasks</code> automatically.
             </p>
           </div>
 
-          <div className="bg-white p-4 rounded-xl border border-zinc-200 shadow-2xs shadow-2xs space-y-1">
+          <div className="bg-white p-4 rounded-xl border border-zinc-200 shadow-2xs space-y-1">
             <div className="flex items-center space-x-2 text-xs font-bold text-zinc-900 font-mono uppercase">
               <Server className="w-4 h-4 text-amber-600" />
               <span>Dispatcher & Reviews</span>
             </div>
             <p className="text-xs text-zinc-500">
-              4-state task state machine (<span className="font-mono text-zinc-800 text-[11px]">not_started, in_progress, ready_for_review, completed</span>) with foreign keys and review logs audit table.
+              <span className="font-mono text-zinc-800 text-[11px]">dashboard_checklist_tasks</span> & <span className="font-mono text-zinc-800 text-[11px]">dashboard_task_reviews</span> audit table with foreign key cascading.
             </p>
           </div>
         </div>
@@ -121,7 +121,7 @@ export const NeonSqlModal: React.FC<{ isOpen?: boolean; onClose?: () => void }> 
                     : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100'
                 }`}
               >
-                1. Neon PostgreSQL DDL (.sql)
+                1. Supabase DDL (.sql)
               </button>
 
               <button
@@ -147,14 +147,14 @@ export const NeonSqlModal: React.FC<{ isOpen?: boolean; onClose?: () => void }> 
               </button>
 
               <button
-                onClick={() => setActiveTab('nextjs-actions')}
+                onClick={() => setActiveTab('supabase-client')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-colors ${
-                  activeTab === 'nextjs-actions'
+                  activeTab === 'supabase-client'
                     ? 'bg-zinc-900 text-white'
                     : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100'
                 }`}
               >
-                4. Next.js Server Actions (.ts)
+                4. Supabase Client SDK (.ts)
               </button>
             </div>
 
@@ -189,15 +189,15 @@ export const NeonSqlModal: React.FC<{ isOpen?: boolean; onClose?: () => void }> 
               {activeTab === 'sql-ddl' && NEON_POSTGRES_SCHEMA_SQL}
               {activeTab === 'seed-sql' && NEON_SEED_DATA_SQL}
               {activeTab === 'drizzle' && DRIZZLE_SCHEMA_SNIPPET}
-              {activeTab === 'nextjs-actions' && NEXTJS_SERVER_ACTION_SNIPPET}
+              {activeTab === 'supabase-client' && NEXTJS_SERVER_ACTION_SNIPPET}
             </pre>
           </div>
         </div>
 
-        {/* Quick Setup Instructions for Neon + Vercel + Next.js */}
+        {/* Quick Setup Instructions for Supabase */}
         <div className="bg-white p-6 rounded-2xl border border-zinc-200 shadow-2xs space-y-4">
           <h2 className="text-sm font-bold text-zinc-900 uppercase font-mono tracking-wider">
-            How to Deploy on Neon & Vercel in 3 Steps
+            How to Set Up in Supabase in 3 Steps
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-zinc-600">
@@ -205,24 +205,24 @@ export const NeonSqlModal: React.FC<{ isOpen?: boolean; onClose?: () => void }> 
               <span className="w-6 h-6 rounded-full bg-zinc-900 text-white font-mono font-bold flex items-center justify-center text-xs">
                 1
               </span>
-              <h4 className="font-bold text-zinc-900">Create Neon Database</h4>
-              <p>Go to <a href="https://neon.tech" target="_blank" rel="noopener noreferrer" className="underline font-medium text-zinc-900">neon.tech</a>, create a free project, open the <strong>SQL Editor</strong> tab, paste the SQL from Tab 1 above, and click <strong>Run</strong>.</p>
+              <h4 className="font-bold text-zinc-900">Run SQL in Supabase</h4>
+              <p>Go to <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" className="underline font-medium text-emerald-700">supabase.com/dashboard</a>, open your project, go to <strong>SQL Editor</strong>, paste Tab 1 above (or <code>supabase/run_all.sql</code>), and click <strong>Run</strong>.</p>
             </div>
 
             <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-200 space-y-2">
               <span className="w-6 h-6 rounded-full bg-zinc-900 text-white font-mono font-bold flex items-center justify-center text-xs">
                 2
               </span>
-              <h4 className="font-bold text-zinc-900">Add Next.js Driver</h4>
-              <p>In your Next.js project root, run <code className="bg-zinc-200 px-1 py-0.5 rounded text-[11px] font-mono">npm install @neondatabase/serverless drizzle-orm</code> and set <code className="bg-zinc-200 px-1 py-0.5 rounded text-[11px] font-mono">DATABASE_URL</code> in your <code className="font-mono">.env.local</code>.</p>
+              <h4 className="font-bold text-zinc-900">Configure Environment Keys</h4>
+              <p>In Supabase, go to <strong>Project Settings $\rightarrow$ API</strong>. Copy your <code>Project URL</code> and <code>anon key</code> into your local <code>.env</code> file (e.g. <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code>).</p>
             </div>
 
             <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-200 space-y-2">
               <span className="w-6 h-6 rounded-full bg-zinc-900 text-white font-mono font-bold flex items-center justify-center text-xs">
                 3
               </span>
-              <h4 className="font-bold text-zinc-900">Deploy to Vercel</h4>
-              <p>Import your GitHub repo into Vercel, connect the Neon integration or add <code className="bg-zinc-200 px-1 py-0.5 rounded text-[11px] font-mono">DATABASE_URL</code> in Environment Variables, and click <strong>Deploy</strong>.</p>
+              <h4 className="font-bold text-zinc-900">Connect Client SDK</h4>
+              <p>Install <code className="bg-zinc-200 px-1 py-0.5 rounded text-[11px] font-mono">@supabase/supabase-js</code> and use Tab 4 snippet to query <code className="font-mono">dashboard_projects</code> and <code className="font-mono">dashboard_view_project_health_scores</code>.</p>
             </div>
           </div>
         </div>

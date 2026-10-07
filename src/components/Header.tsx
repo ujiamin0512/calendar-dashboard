@@ -85,7 +85,7 @@ export const Header: React.FC<HeaderProps> = ({
                 }`}
               >
                 <Database className="w-4 h-4 text-emerald-400" />
-                <span>Neon & Next.js SQL</span>
+                <span>Supabase & SQL</span>
               </button>
             </nav>
           </div>
@@ -163,7 +163,7 @@ export const Header: React.FC<HeaderProps> = ({
               currentView === 'neon-schema' ? 'bg-zinc-900 text-white' : 'text-zinc-600'
             }`}
           >
-            Neon SQL
+            Supabase SQL
           </button>
         </div>
       </div>

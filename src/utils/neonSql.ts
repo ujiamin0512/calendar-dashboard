@@ -1,7 +1,8 @@
 export const NEON_POSTGRES_SCHEMA_SQL = `-- ====================================================================
--- TRAINER MANAGEMENT DASHBOARD - NEON POSTGRESQL SCHEMA
--- Ready to run directly in the Neon SQL Editor Console
--- Compatible with PostgreSQL 15+ / Neon Serverless Postgres
+-- TRAINER MANAGEMENT DASHBOARD - SUPABASE / POSTGRESQL SCHEMA
+-- Ready to run directly in the Supabase SQL Editor Console
+-- Compatible with PostgreSQL 15+ / Supabase
+-- All tables are namespaced with "dashboard_" prefix
 -- ====================================================================
 
 -- 1. Enable UUID Extension
@@ -34,7 +35,7 @@ EXCEPTION
 END $$;
 
 -- 3. Users and Roles Table
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE IF NOT EXISTS dashboard_users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email VARCHAR(255) UNIQUE NOT NULL,
     full_name VARCHAR(150) NOT NULL,
@@ -49,7 +50,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- 4. Projects Table
-CREATE TABLE IF NOT EXISTS projects (
+CREATE TABLE IF NOT EXISTS dashboard_projects (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
     d_day DATE NOT NULL,
@@ -62,18 +63,18 @@ CREATE TABLE IF NOT EXISTS projects (
     attendees_count INT DEFAULT 0,
     status project_status_enum NOT NULL DEFAULT 'in_progress',
     notes TEXT,
-    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_by UUID REFERENCES dashboard_users(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- 5. Tasks / Checklist Items Table
-CREATE TABLE IF NOT EXISTS checklist_tasks (
+CREATE TABLE IF NOT EXISTS dashboard_checklist_tasks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    project_id UUID NOT NULL REFERENCES dashboard_projects(id) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
     description TEXT,
-    assigned_intern_id UUID REFERENCES users(id) ON DELETE SET NULL, -- NULL indicates Master Backlog
+    assigned_intern_id UUID REFERENCES dashboard_users(id) ON DELETE SET NULL, -- NULL indicates Master Backlog
     state task_state_enum NOT NULL DEFAULT 'not_started',
     priority task_priority_enum NOT NULL DEFAULT 'medium',
     phase VARCHAR(100) NOT NULL DEFAULT 'General Prep',
@@ -88,27 +89,27 @@ CREATE TABLE IF NOT EXISTS checklist_tasks (
 );
 
 -- 6. Task Review Logs (Audit trail for Admin reviews)
-CREATE TABLE IF NOT EXISTS task_reviews (
+CREATE TABLE IF NOT EXISTS dashboard_task_reviews (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    task_id UUID NOT NULL REFERENCES checklist_tasks(id) ON DELETE CASCADE,
-    reviewed_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    task_id UUID NOT NULL REFERENCES dashboard_checklist_tasks(id) ON DELETE CASCADE,
+    reviewed_by UUID NOT NULL REFERENCES dashboard_users(id) ON DELETE CASCADE,
     decision VARCHAR(50) NOT NULL, -- 'approved', 'revision_requested'
     feedback_notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- 7. High-Performance Indexes
-CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON checklist_tasks(project_id);
-CREATE INDEX IF NOT EXISTS idx_tasks_assigned_intern ON checklist_tasks(assigned_intern_id);
-CREATE INDEX IF NOT EXISTS idx_tasks_state ON checklist_tasks(state);
-CREATE INDEX IF NOT EXISTS idx_projects_d_day ON projects(d_day);
-CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status);
-CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+CREATE INDEX IF NOT EXISTS idx_dashboard_tasks_project_id ON dashboard_checklist_tasks(project_id);
+CREATE INDEX IF NOT EXISTS idx_dashboard_tasks_assigned_intern ON dashboard_checklist_tasks(assigned_intern_id);
+CREATE INDEX IF NOT EXISTS idx_dashboard_tasks_state ON dashboard_checklist_tasks(state);
+CREATE INDEX IF NOT EXISTS idx_dashboard_projects_d_day ON dashboard_projects(d_day);
+CREATE INDEX IF NOT EXISTS idx_dashboard_projects_status ON dashboard_projects(status);
+CREATE INDEX IF NOT EXISTS idx_dashboard_users_role ON dashboard_users(role);
 
 -- 8. Algorithmic Health Score Real-Time View
 -- Computes Health Score: (Days until D-Day ÷ Remaining Unfinished Tasks)
 -- Pinned to top when health_score is lowest!
-CREATE OR REPLACE VIEW view_project_health_scores AS
+CREATE OR REPLACE VIEW dashboard_view_project_health_scores AS
 WITH task_aggregates AS (
     SELECT 
         p.id AS project_id,
@@ -120,8 +121,8 @@ WITH task_aggregates AS (
         COUNT(t.id) AS total_tasks,
         COUNT(CASE WHEN t.state = 'completed' THEN 1 END) AS completed_tasks,
         COUNT(CASE WHEN t.state != 'completed' THEN 1 END) AS remaining_tasks
-    FROM projects p
-    LEFT JOIN checklist_tasks t ON t.project_id = p.id
+    FROM dashboard_projects p
+    LEFT JOIN dashboard_checklist_tasks t ON t.project_id = p.id
     GROUP BY p.id, p.name, p.d_day, p.company_name, p.status
 )
 SELECT 
@@ -162,22 +163,22 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS set_timestamp_users ON users;
-CREATE TRIGGER set_timestamp_users BEFORE UPDATE ON users FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
+DROP TRIGGER IF EXISTS set_timestamp_dashboard_users ON dashboard_users;
+CREATE TRIGGER set_timestamp_dashboard_users BEFORE UPDATE ON dashboard_users FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
 
-DROP TRIGGER IF EXISTS set_timestamp_projects ON projects;
-CREATE TRIGGER set_timestamp_projects BEFORE UPDATE ON projects FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
+DROP TRIGGER IF EXISTS set_timestamp_dashboard_projects ON dashboard_projects;
+CREATE TRIGGER set_timestamp_dashboard_projects BEFORE UPDATE ON dashboard_projects FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
 
-DROP TRIGGER IF EXISTS set_timestamp_tasks ON checklist_tasks;
-CREATE TRIGGER set_timestamp_tasks BEFORE UPDATE ON checklist_tasks FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
+DROP TRIGGER IF EXISTS set_timestamp_dashboard_tasks ON dashboard_checklist_tasks;
+CREATE TRIGGER set_timestamp_dashboard_tasks BEFORE UPDATE ON dashboard_checklist_tasks FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
 `;
 
 export const NEON_SEED_DATA_SQL = `-- ====================================================================
--- SEED DATA FOR NEON SQL CONSOLE
+-- SEED DATA FOR SUPABASE / POSTGRESQL CONSOLE
 -- ====================================================================
 
 -- Insert Sample Interns and Admins
-INSERT INTO users (id, email, full_name, role, phone, daily_capacity, skills)
+INSERT INTO dashboard_users (id, email, full_name, role, phone, daily_capacity, skills)
 VALUES 
   ('a1111111-1111-1111-1111-111111111111', 'elena.rostova@trainerhub.io', 'Elena Rostova', 'intern', '+1-555-0101', 5, ARRAY['Slide QA', 'VIP Liaison', 'Speaker Coordination']),
   ('b2222222-2222-2222-2222-222222222222', 'kenji.t@trainerhub.io', 'Kenji Takahashi', 'intern', '+1-555-0102', 4, ARRAY['AV Setup', 'Zoom Rooms', 'Microphones']),
@@ -185,14 +186,14 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- Insert Training Projects
-INSERT INTO projects (id, name, d_day, company_name, slogan, training_provider, storage_url, location, attendees_count)
+INSERT INTO dashboard_projects (id, name, d_day, company_name, slogan, training_provider, storage_url, location, attendees_count)
 VALUES 
   ('11111111-1111-1111-1111-111111111111', 'Executive AI Leadership Summit', CURRENT_DATE + INTERVAL '3 days', 'Fintech Vanguard Corp', 'Mastering Enterprise Intelligence', 'Apex Academy Global', 'https://drive.google.com/drive/folders/summit-2026', 'Metropolitan Hall B', 65),
   ('22222222-2222-2222-2222-222222222222', 'Cloud Native DevOps Bootcamp', CURRENT_DATE + INTERVAL '7 days', 'Nexus Mobility Labs', 'Zero-Downtime Architecture', 'Apex Academy Global', 'https://storage.cloud.google.com/nexus-devops', 'Innovation Lab 4', 30)
 ON CONFLICT (id) DO NOTHING;
 
 -- Insert Checklist Tasks
-INSERT INTO checklist_tasks (project_id, title, description, assigned_intern_id, state, priority, phase, due_date)
+INSERT INTO dashboard_checklist_tasks (project_id, title, description, assigned_intern_id, state, priority, phase, due_date)
 VALUES
   ('11111111-1111-1111-1111-111111111111', 'Print Executive Dossiers & VIP Lanyards', 'High GSM matte print for keynote speakers', 'a1111111-1111-1111-1111-111111111111', 'ready_for_review', 'urgent', 'Printouts & Badges', CURRENT_DATE + INTERVAL '1 day'),
   ('11111111-1111-1111-1111-111111111111', 'AV Wireless Clicker & Frequency Testing', 'Check 2.4Ghz channel interference', 'b2222222-2222-2222-2222-222222222222', 'in_progress', 'urgent', 'Tech & AV Setup', CURRENT_DATE + INTERVAL '1 day'),
@@ -200,39 +201,43 @@ VALUES
   ('22222222-2222-2222-2222-222222222222', 'Pre-Provision Kubernetes Clusters', 'Create 30 student namespaces', 'b2222222-2222-2222-2222-222222222222', 'in_progress', 'high', 'Tech & AV Setup', CURRENT_DATE + INTERVAL '4 days');
 `;
 
-export const NEXTJS_SERVER_ACTION_SNIPPET = `// app/actions/projects.ts
-// Next.js App Router Server Action with @neondatabase/serverless or drizzle-orm
-'use server';
+export const NEXTJS_SERVER_ACTION_SNIPPET = `// lib/supabase.ts or app/actions/projects.ts
+// Supabase Client & Queries with dashboard_ table names
+import { createClient } from '@supabase/supabase-js';
 
-import { neon } from '@neondatabase/serverless';
-import { revalidatePath } from 'next/cache';
-
-const sql = neon(process.env.DATABASE_URL!);
+export const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY!
+);
 
 export async function getProjectsWithHealthScore() {
-  const projects = await sql\`
-    SELECT * FROM view_project_health_scores
-    ORDER BY health_score ASC;
-  \`;
-  return projects;
+  const { data, error } = await supabase
+    .from('dashboard_view_project_health_scores')
+    .select('*')
+    .order('health_score', { ascending: true });
+    
+  if (error) throw error;
+  return data;
 }
 
 export async function updateTaskState(taskId: string, newState: string, internId?: string | null) {
-  await sql\`
-    UPDATE checklist_tasks
-    SET 
-      state = \${newState}::task_state_enum,
-      assigned_intern_id = \${internId !== undefined ? internId : sql\`assigned_intern_id\`},
-      completed_at = CASE WHEN \${newState} = 'completed' THEN NOW() ELSE completed_at END,
-      submitted_at = CASE WHEN \${newState} = 'ready_for_review' THEN NOW() ELSE submitted_at END
-    WHERE id = \${taskId}
-  \`;
-  revalidatePath('/dispatcher');
-  revalidatePath('/projects');
+  const updates: Record<string, any> = {
+    state: newState,
+    ...(internId !== undefined && { assigned_intern_id: internId }),
+    ...(newState === 'completed' && { completed_at: new Date().toISOString() }),
+    ...(newState === 'ready_for_review' && { submitted_at: new Date().toISOString() }),
+  };
+
+  const { error } = await supabase
+    .from('dashboard_checklist_tasks')
+    .update(updates)
+    .eq('id', taskId);
+
+  if (error) throw error;
 }
 `;
 
-export const DRIZZLE_SCHEMA_SNIPPET = `// db/schema.ts (Drizzle ORM for Neon Postgres)
+export const DRIZZLE_SCHEMA_SNIPPET = `// db/schema.ts (Drizzle ORM for PostgreSQL / Supabase)
 import { pgTable, uuid, varchar, text, date, integer, boolean, timestamp, pgEnum } from 'drizzle-orm/pg-core';
 
 export const userRoleEnum = pgEnum('user_role_enum', ['admin', 'lead_trainer', 'intern', 'viewer']);
@@ -240,7 +245,7 @@ export const taskStateEnum = pgEnum('task_state_enum', ['not_started', 'in_progr
 export const taskPriorityEnum = pgEnum('task_priority_enum', ['urgent', 'high', 'medium', 'low']);
 export const projectStatusEnum = pgEnum('project_status_enum', ['upcoming', 'in_progress', 'completed', 'archived']);
 
-export const users = pgTable('users', {
+export const dashboardUsers = pgTable('dashboard_users', {
   id: uuid('id').defaultRandom().primaryKey(),
   email: varchar('email', { length: 255 }).unique().notNull(),
   fullName: varchar('full_name', { length: 150 }).notNull(),
@@ -250,7 +255,7 @@ export const users = pgTable('users', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const projects = pgTable('projects', {
+export const dashboardProjects = pgTable('dashboard_projects', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: varchar('name', { length: 255 }).notNull(),
   dDay: date('d_day').notNull(),
@@ -263,12 +268,12 @@ export const projects = pgTable('projects', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const checklistTasks = pgTable('checklist_tasks', {
+export const dashboardChecklistTasks = pgTable('dashboard_checklist_tasks', {
   id: uuid('id').defaultRandom().primaryKey(),
-  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  projectId: uuid('project_id').references(() => dashboardProjects.id, { onDelete: 'cascade' }).notNull(),
   title: varchar('title', { length: 255 }).notNull(),
   description: text('description'),
-  assignedInternId: uuid('assigned_intern_id').references(() => users.id, { onDelete: 'set null' }),
+  assignedInternId: uuid('assigned_intern_id').references(() => dashboardUsers.id, { onDelete: 'set null' }),
   state: taskStateEnum('state').default('not_started').notNull(),
   priority: taskPriorityEnum('priority').default('medium').notNull(),
   phase: varchar('phase', { length: 100 }).notNull(),

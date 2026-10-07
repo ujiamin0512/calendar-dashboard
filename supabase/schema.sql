@@ -1,7 +1,8 @@
 -- ====================================================================
--- TRAINER MANAGEMENT DASHBOARD - NEON POSTGRESQL SCHEMA
--- Ready to run directly in the Neon SQL Editor Console (neon.tech)
--- Compatible with PostgreSQL 15+ / Neon Serverless Postgres
+-- TRAINER MANAGEMENT DASHBOARD - SUPABASE / POSTGRESQL SCHEMA
+-- Ready to run directly in the Supabase SQL Editor Console
+-- Compatible with PostgreSQL 15+ / Supabase
+-- All tables are namespaced with "dashboard_" prefix
 -- ====================================================================
 
 -- 1. Enable Cryptographic & UUID Extensions
@@ -34,7 +35,7 @@ EXCEPTION
 END $$;
 
 -- 3. Users Table (Interns, Trainers, Admins)
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE IF NOT EXISTS dashboard_users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email VARCHAR(255) UNIQUE NOT NULL,
     full_name VARCHAR(150) NOT NULL,
@@ -49,7 +50,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- 4. Projects Table (Training Events & D-Days)
-CREATE TABLE IF NOT EXISTS projects (
+CREATE TABLE IF NOT EXISTS dashboard_projects (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
     d_day DATE NOT NULL,
@@ -62,18 +63,18 @@ CREATE TABLE IF NOT EXISTS projects (
     attendees_count INT DEFAULT 0,
     status project_status_enum NOT NULL DEFAULT 'in_progress',
     notes TEXT,
-    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_by UUID REFERENCES dashboard_users(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- 5. Checklist Tasks Table (Actionable Items)
-CREATE TABLE IF NOT EXISTS checklist_tasks (
+CREATE TABLE IF NOT EXISTS dashboard_checklist_tasks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    project_id UUID NOT NULL REFERENCES dashboard_projects(id) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
     description TEXT,
-    assigned_intern_id UUID REFERENCES users(id) ON DELETE SET NULL, -- NULL = Master Backlog
+    assigned_intern_id UUID REFERENCES dashboard_users(id) ON DELETE SET NULL, -- NULL = Master Backlog
     state task_state_enum NOT NULL DEFAULT 'not_started',
     priority task_priority_enum NOT NULL DEFAULT 'medium',
     phase VARCHAR(100) NOT NULL DEFAULT 'Curriculum & Slides',
@@ -88,27 +89,27 @@ CREATE TABLE IF NOT EXISTS checklist_tasks (
 );
 
 -- 6. Task Review Logs (Audit Trail for Admin Sign-Offs)
-CREATE TABLE IF NOT EXISTS task_reviews (
+CREATE TABLE IF NOT EXISTS dashboard_task_reviews (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    task_id UUID NOT NULL REFERENCES checklist_tasks(id) ON DELETE CASCADE,
-    reviewed_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    task_id UUID NOT NULL REFERENCES dashboard_checklist_tasks(id) ON DELETE CASCADE,
+    reviewed_by UUID NOT NULL REFERENCES dashboard_users(id) ON DELETE CASCADE,
     decision VARCHAR(50) NOT NULL,         -- 'approved', 'revision_requested'
     feedback_notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- 7. High-Performance Indexes
-CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON checklist_tasks(project_id);
-CREATE INDEX IF NOT EXISTS idx_tasks_assigned_intern ON checklist_tasks(assigned_intern_id);
-CREATE INDEX IF NOT EXISTS idx_tasks_state ON checklist_tasks(state);
-CREATE INDEX IF NOT EXISTS idx_projects_d_day ON projects(d_day);
-CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status);
-CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+CREATE INDEX IF NOT EXISTS idx_dashboard_tasks_project_id ON dashboard_checklist_tasks(project_id);
+CREATE INDEX IF NOT EXISTS idx_dashboard_tasks_assigned_intern ON dashboard_checklist_tasks(assigned_intern_id);
+CREATE INDEX IF NOT EXISTS idx_dashboard_tasks_state ON dashboard_checklist_tasks(state);
+CREATE INDEX IF NOT EXISTS idx_dashboard_projects_d_day ON dashboard_projects(d_day);
+CREATE INDEX IF NOT EXISTS idx_dashboard_projects_status ON dashboard_projects(status);
+CREATE INDEX IF NOT EXISTS idx_dashboard_users_role ON dashboard_users(role);
 
 -- 8. Algorithmic Health Score Real-Time View
 -- Formula: Days until D-Day ÷ Remaining Unfinished Tasks
 -- Projects with lowest health_score (most urgent) sort to top.
-CREATE OR REPLACE VIEW view_project_health_scores AS
+CREATE OR REPLACE VIEW dashboard_view_project_health_scores AS
 WITH task_aggregates AS (
     SELECT 
         p.id AS project_id,
@@ -124,8 +125,8 @@ WITH task_aggregates AS (
         COUNT(t.id) AS total_tasks,
         COUNT(CASE WHEN t.state = 'completed' THEN 1 END) AS completed_tasks,
         COUNT(CASE WHEN t.state != 'completed' THEN 1 END) AS remaining_tasks
-    FROM projects p
-    LEFT JOIN checklist_tasks t ON t.project_id = p.id
+    FROM dashboard_projects p
+    LEFT JOIN dashboard_checklist_tasks t ON t.project_id = p.id
     GROUP BY p.id, p.name, p.d_day, p.company_name, p.slogan, p.training_provider, p.storage_url, p.evaluation_qr_code_url, p.status
 )
 SELECT 
@@ -170,11 +171,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS set_timestamp_users ON users;
-CREATE TRIGGER set_timestamp_users BEFORE UPDATE ON users FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
+DROP TRIGGER IF EXISTS set_timestamp_dashboard_users ON dashboard_users;
+CREATE TRIGGER set_timestamp_dashboard_users BEFORE UPDATE ON dashboard_users FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
 
-DROP TRIGGER IF EXISTS set_timestamp_projects ON projects;
-CREATE TRIGGER set_timestamp_projects BEFORE UPDATE ON projects FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
+DROP TRIGGER IF EXISTS set_timestamp_dashboard_projects ON dashboard_projects;
+CREATE TRIGGER set_timestamp_dashboard_projects BEFORE UPDATE ON dashboard_projects FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
 
-DROP TRIGGER IF EXISTS set_timestamp_tasks ON checklist_tasks;
-CREATE TRIGGER set_timestamp_tasks BEFORE UPDATE ON checklist_tasks FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
+DROP TRIGGER IF EXISTS set_timestamp_dashboard_tasks ON dashboard_checklist_tasks;
+CREATE TRIGGER set_timestamp_dashboard_tasks BEFORE UPDATE ON dashboard_checklist_tasks FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
