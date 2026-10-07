@@ -1,0 +1,6 @@
+{
+  "name": "Trainer Management Dashboard",
+  "description": "Minimalist trainer management dashboard with calendar command center, algorithmic health score tracking, admin task dispatcher, and Google Keep checklist integration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
