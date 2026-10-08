@@ -1,15 +1,27 @@
 -- ====================================================================
 -- ALL-IN-ONE SUPABASE / POSTGRESQL INITIALIZATION (SCHEMA + SEED DATA)
 -- Copy and paste this entire file directly into Supabase SQL Editor & Click Run
--- All tables are namespaced with "dashboard_" prefix
+-- Uses short, human-readable IDs (e.g. 'proj-1', 'task-101', 'intern-1')
 -- ====================================================================
 
 -- ====================================================================
--- PART 1: EXTENSIONS & ENUMS
+-- PART 1: CLEANUP PREVIOUS TABLES (ALLOWS MIGRATING UUID -> SHORT VARCHAR)
 -- ====================================================================
 
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+DROP VIEW IF EXISTS dashboard_view_project_health_scores CASCADE;
+DROP VIEW IF EXISTS view_project_health_scores CASCADE;
+DROP TABLE IF EXISTS dashboard_task_reviews CASCADE;
+DROP TABLE IF EXISTS dashboard_checklist_tasks CASCADE;
+DROP TABLE IF EXISTS dashboard_projects CASCADE;
+DROP TABLE IF EXISTS dashboard_users CASCADE;
+DROP TABLE IF EXISTS task_reviews CASCADE;
+DROP TABLE IF EXISTS checklist_tasks CASCADE;
+DROP TABLE IF EXISTS projects CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+
+-- ====================================================================
+-- PART 2: ENUMS
+-- ====================================================================
 
 DO $$ BEGIN
     CREATE TYPE user_role_enum AS ENUM ('admin', 'lead_trainer', 'intern', 'viewer');
@@ -36,12 +48,12 @@ EXCEPTION
 END $$;
 
 -- ====================================================================
--- PART 2: TABLES
+-- PART 3: TABLES WITH SHORT & READABLE IDS
 -- ====================================================================
 
--- 1. Users Table
-CREATE TABLE IF NOT EXISTS dashboard_users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+-- 1. Users Table (Interns, Trainers, Admins)
+CREATE TABLE dashboard_users (
+    id VARCHAR(50) PRIMARY KEY DEFAULT ('usr_' || substr(md5(random()::text), 1, 8)),
     email VARCHAR(255) UNIQUE NOT NULL,
     full_name VARCHAR(150) NOT NULL,
     role user_role_enum NOT NULL DEFAULT 'intern',
@@ -54,9 +66,9 @@ CREATE TABLE IF NOT EXISTS dashboard_users (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 2. Projects Table
-CREATE TABLE IF NOT EXISTS dashboard_projects (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+-- 2. Projects Table (Training Events & D-Days)
+CREATE TABLE dashboard_projects (
+    id VARCHAR(50) PRIMARY KEY DEFAULT ('proj_' || substr(md5(random()::text), 1, 8)),
     name VARCHAR(255) NOT NULL,
     d_day DATE NOT NULL,
     company_name VARCHAR(200) NOT NULL,
@@ -68,18 +80,18 @@ CREATE TABLE IF NOT EXISTS dashboard_projects (
     attendees_count INT DEFAULT 0,
     status project_status_enum NOT NULL DEFAULT 'in_progress',
     notes TEXT,
-    created_by UUID REFERENCES dashboard_users(id) ON DELETE SET NULL,
+    created_by VARCHAR(50) REFERENCES dashboard_users(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 3. Checklist Tasks Table
-CREATE TABLE IF NOT EXISTS dashboard_checklist_tasks (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID NOT NULL REFERENCES dashboard_projects(id) ON DELETE CASCADE,
+-- 3. Checklist Tasks Table (Actionable Items)
+CREATE TABLE dashboard_checklist_tasks (
+    id VARCHAR(50) PRIMARY KEY DEFAULT ('task_' || substr(md5(random()::text), 1, 8)),
+    project_id VARCHAR(50) NOT NULL REFERENCES dashboard_projects(id) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
     description TEXT,
-    assigned_intern_id UUID REFERENCES dashboard_users(id) ON DELETE SET NULL, -- NULL = Master Backlog
+    assigned_intern_id VARCHAR(50) REFERENCES dashboard_users(id) ON DELETE SET NULL, -- NULL = Master Backlog
     state task_state_enum NOT NULL DEFAULT 'not_started',
     priority task_priority_enum NOT NULL DEFAULT 'medium',
     phase VARCHAR(100) NOT NULL DEFAULT 'Curriculum & Slides',
@@ -94,25 +106,25 @@ CREATE TABLE IF NOT EXISTS dashboard_checklist_tasks (
 );
 
 -- 4. Task Reviews Audit Table
-CREATE TABLE IF NOT EXISTS dashboard_task_reviews (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    task_id UUID NOT NULL REFERENCES dashboard_checklist_tasks(id) ON DELETE CASCADE,
-    reviewed_by UUID NOT NULL REFERENCES dashboard_users(id) ON DELETE CASCADE,
+CREATE TABLE dashboard_task_reviews (
+    id VARCHAR(50) PRIMARY KEY DEFAULT ('rev_' || substr(md5(random()::text), 1, 8)),
+    task_id VARCHAR(50) NOT NULL REFERENCES dashboard_checklist_tasks(id) ON DELETE CASCADE,
+    reviewed_by VARCHAR(50) NOT NULL REFERENCES dashboard_users(id) ON DELETE CASCADE,
     decision VARCHAR(50) NOT NULL,
     feedback_notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- ====================================================================
--- PART 3: INDEXES & REAL-TIME ALGORITHMIC HEALTH VIEW
+-- PART 4: INDEXES & REAL-TIME ALGORITHMIC HEALTH VIEW
 -- ====================================================================
 
-CREATE INDEX IF NOT EXISTS idx_dashboard_tasks_project_id ON dashboard_checklist_tasks(project_id);
-CREATE INDEX IF NOT EXISTS idx_dashboard_tasks_assigned_intern ON dashboard_checklist_tasks(assigned_intern_id);
-CREATE INDEX IF NOT EXISTS idx_dashboard_tasks_state ON dashboard_checklist_tasks(state);
-CREATE INDEX IF NOT EXISTS idx_dashboard_projects_d_day ON dashboard_projects(d_day);
-CREATE INDEX IF NOT EXISTS idx_dashboard_projects_status ON dashboard_projects(status);
-CREATE INDEX IF NOT EXISTS idx_dashboard_users_role ON dashboard_users(role);
+CREATE INDEX idx_dashboard_tasks_project_id ON dashboard_checklist_tasks(project_id);
+CREATE INDEX idx_dashboard_tasks_assigned_intern ON dashboard_checklist_tasks(assigned_intern_id);
+CREATE INDEX idx_dashboard_tasks_state ON dashboard_checklist_tasks(state);
+CREATE INDEX idx_dashboard_projects_d_day ON dashboard_projects(d_day);
+CREATE INDEX idx_dashboard_projects_status ON dashboard_projects(status);
+CREATE INDEX idx_dashboard_users_role ON dashboard_users(role);
 
 -- Algorithmic Health Score Real-Time View
 -- Health Score = Days until D-Day ÷ Remaining Tasks
@@ -170,7 +182,7 @@ FROM task_aggregates
 ORDER BY health_score ASC;
 
 -- ====================================================================
--- PART 4: TRIGGERS (AUTOMATIC TIMESTAMPS)
+-- PART 5: TRIGGERS (AUTOMATIC TIMESTAMPS)
 -- ====================================================================
 
 CREATE OR REPLACE FUNCTION trigger_set_timestamp()
@@ -191,23 +203,27 @@ DROP TRIGGER IF EXISTS set_timestamp_dashboard_tasks ON dashboard_checklist_task
 CREATE TRIGGER set_timestamp_dashboard_tasks BEFORE UPDATE ON dashboard_checklist_tasks FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
 
 -- ====================================================================
--- PART 5: SEED DATA
+-- PART 6: SEED DATA (READABLE SHORT IDS)
 -- ====================================================================
 
--- Insert Users (Interns + Trainers)
+-- 1. Insert Users (Interns + Trainers)
 INSERT INTO dashboard_users (id, email, full_name, role, phone, daily_capacity, skills)
 VALUES 
-  ('a1111111-1111-1111-1111-111111111111', 'elena.rostova@traininghub.internal', 'Elena Rostova', 'intern', '+1-555-0101', 5, ARRAY['Slide QA', 'Agenda Timekeeping', 'Speaker Liaison']),
-  ('b2222222-2222-2222-2222-222222222222', 'kenji.t@traininghub.internal', 'Kenji Takahashi', 'intern', '+1-555-0102', 4, ARRAY['AV Setup', 'Zoom Rooms', 'Microphones']),
-  ('c3333333-3333-3333-3333-333333333333', 'sarah.j@traininghub.internal', 'Sarah Jenkins', 'intern', '+1-555-0103', 4, ARRAY['Badge Printing', 'Catering Orders', 'Workbook Binding']),
-  ('d4444444-4444-4444-4444-444444444444', 'admin.marcus@traininghub.internal', 'Marcus Trainer (Admin)', 'admin', '+1-555-0100', 8, ARRAY['Curriculum Lead', 'Reviewer'])
-ON CONFLICT (id) DO NOTHING;
+  ('intern-1', 'elena.rostova@traininghub.internal', 'Elena Rostova', 'intern', '+1-555-0101', 5, ARRAY['Slide QA', 'Agenda Timekeeping', 'Speaker Liaison']),
+  ('intern-2', 'kenji.t@traininghub.internal', 'Kenji Takahashi', 'intern', '+1-555-0102', 4, ARRAY['AV Setup', 'Zoom Rooms', 'Microphones']),
+  ('intern-3', 'sarah.j@traininghub.internal', 'Sarah Jenkins', 'intern', '+1-555-0103', 4, ARRAY['Badge Printing', 'Catering Orders', 'Workbook Binding']),
+  ('admin-1',  'admin.marcus@traininghub.internal', 'Marcus Trainer (Admin)', 'admin', '+1-555-0100', 8, ARRAY['Curriculum Lead', 'Reviewer'])
+ON CONFLICT (id) DO UPDATE SET
+  full_name = EXCLUDED.full_name,
+  role = EXCLUDED.role,
+  daily_capacity = EXCLUDED.daily_capacity,
+  skills = EXCLUDED.skills;
 
--- Insert Projects
+-- 2. Insert Training Projects
 INSERT INTO dashboard_projects (id, name, d_day, company_name, slogan, training_provider, storage_url, location, attendees_count, status)
 VALUES 
   (
-    '11111111-1111-1111-1111-111111111111', 
+    'proj-1', 
     'Executive AI Leadership Summit', 
     CURRENT_DATE + INTERVAL '3 days', 
     'Fintech Vanguard Corp', 
@@ -219,7 +235,7 @@ VALUES
     'in_progress'
   ),
   (
-    '22222222-2222-2222-2222-222222222222', 
+    'proj-2', 
     'Cloud Native DevOps Bootcamp', 
     CURRENT_DATE + INTERVAL '7 days', 
     'Nexus Mobility Labs', 
@@ -231,7 +247,7 @@ VALUES
     'in_progress'
   ),
   (
-    '33333333-3333-3333-3333-333333333333', 
+    'proj-3', 
     'Product Design Systems Workshop', 
     CURRENT_DATE + INTERVAL '14 days', 
     'Omni Retail Brands', 
@@ -242,17 +258,21 @@ VALUES
     45, 
     'upcoming'
   )
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  d_day = EXCLUDED.d_day,
+  company_name = EXCLUDED.company_name,
+  status = EXCLUDED.status;
 
--- Insert Tasks
+-- 3. Insert Checklist Tasks
 INSERT INTO dashboard_checklist_tasks (id, project_id, title, description, assigned_intern_id, state, priority, phase, due_date, estimated_minutes, review_notes)
 VALUES
   (
-    'e1111111-0001-0000-0000-000000000001',
-    '11111111-1111-1111-1111-111111111111', 
+    'task-101',
+    'proj-1', 
     'Print Executive Dossiers & VIP Lanyards', 
     'Double-sided matte 120gsm paper with custom foil stamping for keynote speakers.', 
-    'a1111111-1111-1111-1111-111111111111', 
+    'intern-1', 
     'ready_for_review', 
     'urgent', 
     'Printouts & Badges', 
@@ -261,11 +281,11 @@ VALUES
     'Sample badge printed. Waiting for trainer sign-off on spelling of keynote speakers.'
   ),
   (
-    'e1111111-0002-0000-0000-000000000002',
-    '11111111-1111-1111-1111-111111111111', 
+    'task-102',
+    'proj-1', 
     'AV & Dual-Screen Wireless Clicker Testing', 
     'Test HDMI matrix switcher, Shure lavalier mic frequencies, and back-up clickers.', 
-    'b2222222-2222-2222-2222-222222222222', 
+    'intern-2', 
     'in_progress', 
     'urgent', 
     'Tech & AV Setup', 
@@ -274,8 +294,8 @@ VALUES
     NULL
   ),
   (
-    'e1111111-0003-0000-0000-000000000003',
-    '11111111-1111-1111-1111-111111111111', 
+    'task-103',
+    'proj-1', 
     'Confirm Catering Headcount & Dietary Requirements', 
     'Provide final VIP dietary restrictions to venue hotel.', 
     NULL, 
@@ -287,11 +307,11 @@ VALUES
     NULL
   ),
   (
-    'e1111111-0004-0000-0000-000000000004',
-    '11111111-1111-1111-1111-111111111111', 
+    'task-104',
+    'proj-1', 
     'Master Deck Slide Proofreading & Video Links Check', 
     'Check high-res slide animations and embedded demo clips.', 
-    'a1111111-1111-1111-1111-111111111111', 
+    'intern-1', 
     'completed', 
     'high', 
     'Curriculum & Slides', 
@@ -300,11 +320,11 @@ VALUES
     NULL
   ),
   (
-    'e2222222-0001-0000-0000-000000000001',
-    '22222222-2222-2222-2222-222222222222', 
+    'task-201',
+    'proj-2', 
     'Pre-Provision Kubernetes Sandbox Clusters', 
     'Spin up 30 isolated k8s namespaces with pre-loaded manifests.', 
-    'b2222222-2222-2222-2222-222222222222', 
+    'intern-2', 
     'in_progress', 
     'high', 
     'Tech & AV Setup', 
@@ -313,8 +333,8 @@ VALUES
     NULL
   ),
   (
-    'e2222222-0002-0000-0000-000000000002',
-    '22222222-2222-2222-2222-222222222222', 
+    'task-202',
+    'proj-2', 
     'Reserve Extension Cords & High-Speed LAN Hubs', 
     'Secure 10 surge-protected power strips and switch boxes.', 
     NULL, 
@@ -326,22 +346,40 @@ VALUES
     NULL
   ),
   (
-    'e3333333-0001-0000-0000-000000000001',
-    '33333333-3333-3333-3333-333333333333', 
+    'task-301',
+    'proj-3', 
     'Figma File Access & Permission Audit', 
     'Ensure attendee emails have editor rights to workshop file.', 
-    'c3333333-3333-3333-3333-333333333333', 
+    'intern-3', 
     'in_progress', 
     'low', 
     'Curriculum & Slides', 
     CURRENT_DATE + INTERVAL '10 days',
     60,
     NULL
+  ),
+  (
+    'task-302',
+    'proj-3', 
+    'Procure Design Workshop Sticky Materials & Sharpies', 
+    'Post-it super sticky notes, colored dot stickers, Sharpie fine points.', 
+    'intern-3', 
+    'ready_for_review', 
+    'low', 
+    'Logistics & Venue', 
+    CURRENT_DATE + INTERVAL '9 days',
+    30,
+    'Ordered from central supply. Order slip #8821 attached for admin validation.'
   )
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET
+  title = EXCLUDED.title,
+  state = EXCLUDED.state,
+  assigned_intern_id = EXCLUDED.assigned_intern_id,
+  due_date = EXCLUDED.due_date;
 
 -- Verification Query
 SELECT 
+    project_id,
     name, 
     d_day, 
     days_until_d_day, 

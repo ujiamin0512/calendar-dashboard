@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
-import { Plus, Calendar, CheckSquare, UserPlus, X } from 'lucide-react';
+import { Plus, Calendar, CheckSquare, UserPlus, X, Clock } from 'lucide-react';
 
 interface FloatingActionButtonProps {
   onAddProject: () => void;
+  onAddMeeting: () => void;
   onAddTask: () => void;
   onAddIntern: () => void;
 }
 
 export const FloatingActionButton: React.FC<FloatingActionButtonProps> = ({
   onAddProject,
+  onAddMeeting,
   onAddTask,
   onAddIntern,
 }) => {
@@ -32,9 +34,22 @@ export const FloatingActionButton: React.FC<FloatingActionButtonProps> = ({
               }}
               className="flex items-center space-x-2.5 px-4 py-2.5 bg-white text-zinc-900 border border-zinc-200 rounded-full shadow-lg hover:bg-zinc-50 transition-transform active:scale-95 text-xs font-semibold"
             >
-              <span>New Training Project</span>
+              <span>New Project</span>
               <div className="w-6 h-6 rounded-full bg-zinc-900 text-white flex items-center justify-center">
                 <Calendar className="w-3.5 h-3.5" />
+              </div>
+            </button>
+
+            <button
+              onClick={() => {
+                setIsOpen(false);
+                onAddMeeting();
+              }}
+              className="flex items-center space-x-2.5 px-4 py-2.5 bg-white text-zinc-900 border border-zinc-200 rounded-full shadow-lg hover:bg-zinc-50 transition-transform active:scale-95 text-xs font-semibold"
+            >
+              <span>New Meeting / Event</span>
+              <div className="w-6 h-6 rounded-full bg-zinc-900 text-white flex items-center justify-center">
+                <Clock className="w-3.5 h-3.5" />
               </div>
             </button>
 

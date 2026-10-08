@@ -18,7 +18,6 @@ interface AdminDispatcherProps {
   onEditTask: (task: ChecklistTask) => void;
   onDeleteTask: (taskId: string) => void;
   onNewTask: (defaultProjectId?: string, defaultInternId?: string | null) => void;
-  onOpenReviewInbox: () => void;
 }
 
 export const AdminDispatcher: React.FC<AdminDispatcherProps> = ({
@@ -32,21 +31,21 @@ export const AdminDispatcher: React.FC<AdminDispatcherProps> = ({
   onEditTask,
   onDeleteTask,
   onNewTask,
-  onOpenReviewInbox,
 }) => {
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
 
   // Filter tasks by selected project
-  const filteredTasks = selectedProjectId === 'all'
+  const dDayOf = (projectId: string) => projects.find(p => p.id === projectId)?.dDay ?? '9999-12-31';
+  const filteredTasks = (selectedProjectId === 'all'
     ? tasks
-    : tasks.filter(t => t.projectId === selectedProjectId);
+    : tasks.filter(t => t.projectId === selectedProjectId)
+  ).slice().sort((a, b) =>
+    dDayOf(a.projectId).localeCompare(dDayOf(b.projectId)) || a.dueDate.localeCompare(b.dueDate)
+  );
 
   // Unassigned tasks (Master Backlog)
   const backlogTasks = filteredTasks.filter(t => !t.assignedInternId);
-
-  // Ready for Review count
-  const pendingReviewCount = tasks.filter(t => t.state === 'ready_for_review').length;
 
   // HTML5 Drag and drop handlers
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
@@ -105,19 +104,6 @@ export const AdminDispatcher: React.FC<AdminDispatcherProps> = ({
     }
   };
 
-  const getPriorityBadge = (priority: ChecklistTask['priority']) => {
-    switch (priority) {
-      case 'urgent':
-        return <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-red-100 text-red-800">URGENT</span>;
-      case 'high':
-        return <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-semibold bg-amber-100 text-amber-800">HIGH</span>;
-      case 'medium':
-        return <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-zinc-100 text-zinc-700">MED</span>;
-      case 'low':
-        return <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-zinc-50 text-zinc-500">LOW</span>;
-    }
-  };
-
   return (
     <div className="flex-1 flex flex-col h-[calc(100vh-4.1rem)] bg-zinc-100 overflow-hidden">
       {/* Dispatcher Header & Filter Bar */}
@@ -149,18 +135,8 @@ export const AdminDispatcher: React.FC<AdminDispatcherProps> = ({
           </div>
         </div>
 
-        {/* Right Info: Review Inbox & Add Task */}
+        {/* Right Info: Add Task */}
         <div className="flex items-center space-x-3 text-xs">
-          {pendingReviewCount > 0 && (
-            <button
-              onClick={onOpenReviewInbox}
-              className="flex items-center space-x-1.5 px-3 py-1 bg-amber-500 text-white rounded-md font-medium hover:bg-amber-600 transition-colors shadow-2xs animate-pulse"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>{pendingReviewCount} Tasks Need Approval</span>
-            </button>
-          )}
-
           <button
             onClick={() => onNewTask(selectedProjectId === 'all' ? projects[0]?.id : selectedProjectId, null)}
             className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-zinc-900 text-white rounded-md font-medium hover:bg-zinc-800 transition-colors shadow-xs"
@@ -239,7 +215,6 @@ export const AdminDispatcher: React.FC<AdminDispatcherProps> = ({
                           {task.title}
                         </h4>
                       </div>
-                      {getPriorityBadge(task.priority)}
                     </div>
 
                     {task.description && (
@@ -249,12 +224,10 @@ export const AdminDispatcher: React.FC<AdminDispatcherProps> = ({
                     )}
 
                     <div className="flex items-center justify-between text-[11px] text-zinc-500 pt-2 border-t border-zinc-100">
-                      <span className="font-mono text-[10px] bg-zinc-100 px-1.5 py-0.5 rounded text-zinc-600">
-                        {task.phase}
-                      </span>
+                      <span />
                       <span className="flex items-center space-x-1 font-mono text-[10px]">
                         <Clock className="w-3 h-3 text-zinc-400" />
-                        <span>Due {formatFriendlyDate(task.dueDate)}</span>
+                        <span>{formatFriendlyDate(task.dueDate)}</span>
                       </span>
                     </div>
 
@@ -300,7 +273,6 @@ export const AdminDispatcher: React.FC<AdminDispatcherProps> = ({
             {interns.map((intern) => {
               const internTasks = filteredTasks.filter(t => t.assignedInternId === intern.id);
               const activeCount = internTasks.filter(t => t.state !== 'completed').length;
-              const isOverCapacity = activeCount > intern.dailyCapacity;
 
               return (
                 <div
@@ -312,8 +284,8 @@ export const AdminDispatcher: React.FC<AdminDispatcherProps> = ({
                     dragOverTarget === intern.id ? 'bg-zinc-200/80 ring-2 ring-zinc-900' : ''
                   }`}
                 >
-                  {/* Intern Header & Capacity Tracker */}
-                  <div className="p-3.5 bg-white border-b border-zinc-200 space-y-2">
+                  {/* Intern Header */}
+                  <div className="p-3.5 bg-white border-b border-zinc-200">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-2.5">
                         <div className="w-7 h-7 rounded-full bg-zinc-900 text-white flex items-center justify-center font-mono font-bold text-xs">
@@ -329,24 +301,10 @@ export const AdminDispatcher: React.FC<AdminDispatcherProps> = ({
                         </div>
                       </div>
 
-                      {/* Capacity badge */}
-                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold ${
-                        isOverCapacity 
-                          ? 'bg-red-100 text-red-800' 
-                          : activeCount === intern.dailyCapacity 
-                          ? 'bg-amber-100 text-amber-800' 
-                          : 'bg-zinc-100 text-zinc-700'
-                      }`}>
-                        {activeCount} / {intern.dailyCapacity} tasks
+                      {/* Open task count */}
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full font-bold bg-zinc-100 text-zinc-700">
+                        {activeCount} open
                       </span>
-                    </div>
-
-                    {/* Capacity bar */}
-                    <div className="w-full bg-zinc-100 h-1 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full ${isOverCapacity ? 'bg-red-500' : 'bg-zinc-800'}`}
-                        style={{ width: `${Math.min(100, (activeCount / intern.dailyCapacity) * 100)}%` }}
-                      />
                     </div>
                   </div>
 
@@ -379,7 +337,6 @@ export const AdminDispatcher: React.FC<AdminDispatcherProps> = ({
                                   {task.title}
                                 </h4>
                               </div>
-                              {getPriorityBadge(task.priority)}
                             </div>
 
                             {/* Task 4-State Pipeline Selector */}
@@ -391,7 +348,6 @@ export const AdminDispatcher: React.FC<AdminDispatcherProps> = ({
                               >
                                 <option value="not_started">Not Started</option>
                                 <option value="in_progress">In Progress</option>
-                                <option value="ready_for_review">Ready for Review ⚠️</option>
                                 <option value="completed">Completed ✓</option>
                               </select>
 
@@ -405,22 +361,9 @@ export const AdminDispatcher: React.FC<AdminDispatcherProps> = ({
                               </button>
                             </div>
 
-                            {/* If in Review state, show alert */}
-                            {task.state === 'ready_for_review' && (
-                              <div className="p-2 bg-amber-50 border border-amber-200 rounded text-[10px] text-amber-900 flex items-center justify-between">
-                                <span>Awaiting admin approval</span>
-                                <button
-                                  onClick={onOpenReviewInbox}
-                                  className="underline font-bold"
-                                >
-                                  Review
-                                </button>
-                              </div>
-                            )}
-
                             {/* Card Footer with Due Date & Edit */}
                             <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400 pt-1">
-                              <span>Due {formatFriendlyDate(task.dueDate)}</span>
+                              <span>{formatFriendlyDate(task.dueDate)}</span>
                               <div className="flex items-center space-x-1">
                                 <button
                                   onClick={() => onEditTask(task)}

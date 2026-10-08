@@ -1,23 +1,26 @@
 -- ====================================================================
 -- SEED DATA FOR SUPABASE / POSTGRESQL CONSOLE
--- Run this after running schema.sql to insert sample projects & interns
--- All tables are namespaced with "dashboard_" prefix
+-- Short, clean, human-readable IDs matching frontend mock data
 -- ====================================================================
 
 -- 1. Insert Interns & Trainers
 INSERT INTO dashboard_users (id, email, full_name, role, phone, daily_capacity, skills)
 VALUES 
-  ('a1111111-1111-1111-1111-111111111111', 'elena.rostova@traininghub.internal', 'Elena Rostova', 'intern', '+1-555-0101', 5, ARRAY['Slide QA', 'Agenda Timekeeping', 'Speaker Liaison']),
-  ('b2222222-2222-2222-2222-222222222222', 'kenji.t@traininghub.internal', 'Kenji Takahashi', 'intern', '+1-555-0102', 4, ARRAY['AV Setup', 'Zoom Rooms', 'Microphones']),
-  ('c3333333-3333-3333-3333-333333333333', 'sarah.j@traininghub.internal', 'Sarah Jenkins', 'intern', '+1-555-0103', 4, ARRAY['Badge Printing', 'Catering Orders', 'Workbook Binding']),
-  ('d4444444-4444-4444-4444-444444444444', 'admin.marcus@traininghub.internal', 'Marcus Trainer (Admin)', 'admin', '+1-555-0100', 8, ARRAY['Curriculum Lead', 'Reviewer'])
-ON CONFLICT (id) DO NOTHING;
+  ('intern-1', 'elena.rostova@traininghub.internal', 'Elena Rostova', 'intern', '+1-555-0101', 5, ARRAY['Slide QA', 'Agenda Timekeeping', 'Speaker Liaison']),
+  ('intern-2', 'kenji.t@traininghub.internal', 'Kenji Takahashi', 'intern', '+1-555-0102', 4, ARRAY['AV Setup', 'Zoom Rooms', 'Microphones']),
+  ('intern-3', 'sarah.j@traininghub.internal', 'Sarah Jenkins', 'intern', '+1-555-0103', 4, ARRAY['Badge Printing', 'Catering Orders', 'Workbook Binding']),
+  ('admin-1',  'admin.marcus@traininghub.internal', 'Marcus Trainer (Admin)', 'admin', '+1-555-0100', 8, ARRAY['Curriculum Lead', 'Reviewer'])
+ON CONFLICT (id) DO UPDATE SET
+  full_name = EXCLUDED.full_name,
+  role = EXCLUDED.role,
+  daily_capacity = EXCLUDED.daily_capacity,
+  skills = EXCLUDED.skills;
 
 -- 2. Insert Training Projects
 INSERT INTO dashboard_projects (id, name, d_day, company_name, slogan, training_provider, storage_url, location, attendees_count, status)
 VALUES 
   (
-    '11111111-1111-1111-1111-111111111111', 
+    'proj-1', 
     'Executive AI Leadership Summit', 
     CURRENT_DATE + INTERVAL '3 days', 
     'Fintech Vanguard Corp', 
@@ -29,7 +32,7 @@ VALUES
     'in_progress'
   ),
   (
-    '22222222-2222-2222-2222-222222222222', 
+    'proj-2', 
     'Cloud Native DevOps Bootcamp', 
     CURRENT_DATE + INTERVAL '7 days', 
     'Nexus Mobility Labs', 
@@ -41,7 +44,7 @@ VALUES
     'in_progress'
   ),
   (
-    '33333333-3333-3333-3333-333333333333', 
+    'proj-3', 
     'Product Design Systems Workshop', 
     CURRENT_DATE + INTERVAL '14 days', 
     'Omni Retail Brands', 
@@ -52,18 +55,22 @@ VALUES
     45, 
     'upcoming'
   )
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  d_day = EXCLUDED.d_day,
+  company_name = EXCLUDED.company_name,
+  status = EXCLUDED.status;
 
 -- 3. Insert Checklist Tasks
 INSERT INTO dashboard_checklist_tasks (id, project_id, title, description, assigned_intern_id, state, priority, phase, due_date, estimated_minutes, review_notes)
 VALUES
-  -- Urgent Project 1 (D-3)
+  -- Project 1 (Urgent: D-3)
   (
-    'e1111111-0001-0000-0000-000000000001',
-    '11111111-1111-1111-1111-111111111111', 
+    'task-101',
+    'proj-1', 
     'Print Executive Dossiers & VIP Lanyards', 
     'Double-sided matte 120gsm paper with custom foil stamping for keynote speakers.', 
-    'a1111111-1111-1111-1111-111111111111', 
+    'intern-1', 
     'ready_for_review', 
     'urgent', 
     'Printouts & Badges', 
@@ -72,11 +79,11 @@ VALUES
     'Sample badge printed. Waiting for trainer sign-off on spelling of keynote speakers.'
   ),
   (
-    'e1111111-0002-0000-0000-000000000002',
-    '11111111-1111-1111-1111-111111111111', 
+    'task-102',
+    'proj-1', 
     'AV & Dual-Screen Wireless Clicker Testing', 
     'Test HDMI matrix switcher, Shure lavalier mic frequencies, and back-up clickers.', 
-    'b2222222-2222-2222-2222-222222222222', 
+    'intern-2', 
     'in_progress', 
     'urgent', 
     'Tech & AV Setup', 
@@ -85,8 +92,8 @@ VALUES
     NULL
   ),
   (
-    'e1111111-0003-0000-0000-000000000003',
-    '11111111-1111-1111-1111-111111111111', 
+    'task-103',
+    'proj-1', 
     'Confirm Catering Headcount & Dietary Requirements', 
     'Provide final VIP dietary restrictions to venue hotel.', 
     NULL, -- Master Backlog
@@ -98,11 +105,11 @@ VALUES
     NULL
   ),
   (
-    'e1111111-0004-0000-0000-000000000004',
-    '11111111-1111-1111-1111-111111111111', 
+    'task-104',
+    'proj-1', 
     'Master Deck Slide Proofreading & Video Links Check', 
     'Check high-res slide animations and embedded demo clips.', 
-    'a1111111-1111-1111-1111-111111111111', 
+    'intern-1', 
     'completed', 
     'high', 
     'Curriculum & Slides', 
@@ -113,11 +120,11 @@ VALUES
 
   -- Project 2 (D-7)
   (
-    'e2222222-0001-0000-0000-000000000001',
-    '22222222-2222-2222-2222-222222222222', 
+    'task-201',
+    'proj-2', 
     'Pre-Provision Kubernetes Sandbox Clusters', 
     'Spin up 30 isolated k8s namespaces with pre-loaded manifests.', 
-    'b2222222-2222-2222-2222-222222222222', 
+    'intern-2', 
     'in_progress', 
     'high', 
     'Tech & AV Setup', 
@@ -126,8 +133,8 @@ VALUES
     NULL
   ),
   (
-    'e2222222-0002-0000-0000-000000000002',
-    '22222222-2222-2222-2222-222222222222', 
+    'task-202',
+    'proj-2', 
     'Reserve Extension Cords & High-Speed LAN Hubs', 
     'Secure 10 surge-protected power strips and switch boxes.', 
     NULL, -- Master Backlog
@@ -141,16 +148,33 @@ VALUES
 
   -- Project 3 (D-14)
   (
-    'e3333333-0001-0000-0000-000000000001',
-    '33333333-3333-3333-3333-333333333333', 
+    'task-301',
+    'proj-3', 
     'Figma File Access & Permission Audit', 
     'Ensure attendee emails have editor rights to workshop file.', 
-    'c3333333-3333-3333-3333-333333333333', 
+    'intern-3', 
     'in_progress', 
     'low', 
     'Curriculum & Slides', 
     CURRENT_DATE + INTERVAL '10 days',
     60,
     NULL
+  ),
+  (
+    'task-302',
+    'proj-3', 
+    'Procure Design Workshop Sticky Materials & Sharpies', 
+    'Post-it super sticky notes, colored dot stickers, Sharpie fine points.', 
+    'intern-3', 
+    'ready_for_review', 
+    'low', 
+    'Logistics & Venue', 
+    CURRENT_DATE + INTERVAL '9 days',
+    30,
+    'Ordered from central supply. Order slip #8821 attached for admin validation.'
   )
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET
+  title = EXCLUDED.title,
+  state = EXCLUDED.state,
+  assigned_intern_id = EXCLUDED.assigned_intern_id,
+  due_date = EXCLUDED.due_date;

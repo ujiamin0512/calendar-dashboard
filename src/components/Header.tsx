@@ -1,11 +1,9 @@
 import React from 'react';
-import { Calendar, LayoutGrid, GitPullRequestDraft, Database, Users, Bell, Plus } from 'lucide-react';
+import { Calendar, LayoutGrid, GitPullRequestDraft, Users, Plus } from 'lucide-react';
 
 interface HeaderProps {
-  currentView: 'calendar' | 'projects' | 'dispatcher' | 'neon-schema';
-  onViewChange: (view: 'calendar' | 'projects' | 'dispatcher' | 'neon-schema') => void;
-  pendingReviewCount: number;
-  onOpenReviewInbox: () => void;
+  currentView: 'calendar' | 'projects' | 'dispatcher';
+  onViewChange: (view: 'calendar' | 'projects' | 'dispatcher') => void;
   onOpenInternsModal: () => void;
   onQuickAdd: () => void;
 }
@@ -13,8 +11,6 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   currentView,
   onViewChange,
-  pendingReviewCount,
-  onOpenReviewInbox,
   onOpenInternsModal,
   onQuickAdd,
 }) => {
@@ -75,18 +71,6 @@ export const Header: React.FC<HeaderProps> = ({
                 <GitPullRequestDraft className="w-4 h-4" />
                 <span>Admin Dispatcher</span>
               </button>
-
-              <button
-                onClick={() => onViewChange('neon-schema')}
-                className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  currentView === 'neon-schema'
-                    ? 'bg-zinc-900 text-white shadow-xs'
-                    : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50'
-                }`}
-              >
-                <Database className="w-4 h-4 text-emerald-400" />
-                <span>Supabase & SQL</span>
-              </button>
             </nav>
           </div>
 
@@ -95,29 +79,11 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Interns Roster Button */}
             <button
               onClick={onOpenInternsModal}
-              title="Manage Interns & Capacity"
+              title="Manage Interns"
               className="flex items-center space-x-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium text-zinc-700 hover:text-zinc-900 hover:bg-zinc-100 rounded-md border border-zinc-200 transition-colors"
             >
               <Users className="w-4 h-4 text-zinc-500" />
               <span className="hidden sm:inline">Interns</span>
-            </button>
-
-            {/* Admin Review Inbox Button */}
-            <button
-              onClick={onOpenReviewInbox}
-              className={`relative flex items-center space-x-2 px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all ${
-                pendingReviewCount > 0
-                  ? 'bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100'
-                  : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 border border-zinc-200'
-              }`}
-            >
-              <Bell className={`w-4 h-4 ${pendingReviewCount > 0 ? 'text-amber-600' : 'text-zinc-500'}`} />
-              <span className="hidden sm:inline">Review Inbox</span>
-              {pendingReviewCount > 0 && (
-                <span className="inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-semibold leading-none text-white bg-amber-600 rounded-full">
-                  {pendingReviewCount}
-                </span>
-              )}
             </button>
 
             {/* Quick Add Button */}
@@ -156,14 +122,6 @@ export const Header: React.FC<HeaderProps> = ({
             }`}
           >
             Dispatcher
-          </button>
-          <button
-            onClick={() => onViewChange('neon-schema')}
-            className={`px-3 py-1 rounded text-xs font-medium whitespace-nowrap ${
-              currentView === 'neon-schema' ? 'bg-zinc-900 text-white' : 'text-zinc-600'
-            }`}
-          >
-            Supabase SQL
           </button>
         </div>
       </div>

@@ -3,7 +3,8 @@ import {
   X, Calendar, Building2, Link as LinkIcon, 
   QrCode, Upload, FileText, MapPin, Users, Sparkles
 } from 'lucide-react';
-import { TrainingProject } from '../types';
+import { TrainingProject, EventLink, EventCategory, EventType } from '../types';
+import { normalizeUrl, EVENT_COLORS, PROJECT_KINDS, kindLabel } from '../utils/eventCategories';
 
 interface ProjectModalProps {
   isOpen: boolean;
@@ -11,6 +12,10 @@ interface ProjectModalProps {
   onSave: (projectData: Partial<TrainingProject>) => void;
   initialProject?: TrainingProject | null;
   defaultDate?: string;
+  prefill?: Partial<TrainingProject>;
+  taskCount?: number;
+  onSwitchToEvent: (draft: Partial<TrainingProject>, category: EventCategory) => void;
+  eventTypes: EventType[];
 }
 
 export const ProjectModal: React.FC<ProjectModalProps> = ({
@@ -19,17 +24,22 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
   onSave,
   initialProject,
   defaultDate,
+  prefill,
+  taskCount = 0,
+  onSwitchToEvent,
+  eventTypes,
 }) => {
   const [formData, setFormData] = useState<Partial<TrainingProject>>({
     name: '',
     dDay: defaultDate || '',
     company: '',
     slogan: '',
-    provider: 'Apex Academy Global',
+    provider: '',
     storageUrl: '',
+    links: [],
     evaluationQrCode: '',
     location: '',
-    attendeesCount: 30,
+    attendeesCount: 0,
     notes: '',
     status: 'in_progress',
   });
@@ -43,16 +53,18 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
         dDay: defaultDate || new Date().toISOString().slice(0, 10),
         company: '',
         slogan: '',
-        provider: 'Apex Academy Global',
+        provider: '',
         storageUrl: '',
+        links: [],
         evaluationQrCode: '',
-        location: 'Grand Training Ballroom A',
-        attendeesCount: 30,
+        location: '',
+        attendeesCount: 0,
         notes: '',
         status: 'in_progress',
+        ...prefill,
       });
     }
-  }, [initialProject, defaultDate, isOpen]);
+  }, [initialProject, defaultDate, prefill, isOpen]);
 
   if (!isOpen) return null;
 
@@ -75,8 +87,11 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.dDay || !formData.company) return;
-    onSave(formData);
+    if (!formData.name || !formData.dDay) return;
+    const links = (formData.links || [])
+      .map(l => ({ label: l.label.trim(), url: normalizeUrl(l.url) }))
+      .filter(l => l.url);
+    onSave({ ...formData, links });
     onClose();
   };
 
@@ -87,7 +102,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
         <div className="px-6 py-5 border-b border-zinc-200 flex items-center justify-between bg-zinc-50/70">
           <div>
             <h2 className="text-base font-bold text-zinc-900 tracking-tight">
-              {initialProject ? 'Edit Training Project' : 'Create Training Project'}
+              {initialProject ? `Edit ${kindLabel(formData.kind)}` : `New ${kindLabel(formData.kind)}`}
             </h2>
             <p className="text-xs text-zinc-500">
               Configure event parameters, D-Day milestone, and collateral assets.
@@ -104,6 +119,47 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+          {/* Type: training / team building project, or turn into a calendar event */}
+          <div>
+            <label className="block text-xs font-semibold text-zinc-700 uppercase tracking-wider font-mono mb-1">
+              Type
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {PROJECT_KINDS.map(k => {
+                const active = (formData.kind || 'training') === k.value;
+                return (
+                  <button
+                    key={k.value}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, kind: k.value })}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs transition-colors ${
+                      active ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 text-zinc-700 hover:bg-zinc-50'
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-sm ${active ? 'bg-white' : 'bg-zinc-800'}`} />
+                    <span>{k.label}</span>
+                  </button>
+                );
+              })}
+              {eventTypes.map(t => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => {
+                    const warning = taskCount > 0
+                      ? `Change this into a ${t.label.toLowerCase()}? Its ${taskCount} checklist task(s) will be deleted.`
+                      : `Change this into a ${t.label.toLowerCase()}? Links and client go into the notes.`;
+                    if (!initialProject || confirm(warning)) onSwitchToEvent(formData, t.id);
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-zinc-200 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors"
+                >
+                  <span className={`w-2 h-2 rounded-full ${EVENT_COLORS[t.color].dot}`} />
+                  <span>{t.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Project Name */}
           <div>
             <label className="block text-xs font-semibold text-zinc-700 uppercase tracking-wider font-mono mb-1">
@@ -132,15 +188,24 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                 onChange={(e) => setFormData({ ...formData, dDay: e.target.value })}
                 className="w-full text-xs px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:bg-white text-zinc-900"
               />
+              <label className="block text-[10px] font-semibold text-zinc-500 uppercase tracking-wider font-mono mt-2 mb-1">
+                Last Day (multi-day events only)
+              </label>
+              <input
+                type="date"
+                min={formData.dDay || undefined}
+                value={formData.endDate || ''}
+                onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                className="w-full text-xs px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:bg-white text-zinc-900"
+              />
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-zinc-700 uppercase tracking-wider font-mono mb-1">
-                Company / Client Name *
+                Company / Client Name
               </label>
               <input
                 type="text"
-                required
                 placeholder="e.g. Fintech Vanguard Corp"
                 value={formData.company || ''}
                 onChange={(e) => setFormData({ ...formData, company: e.target.value })}
@@ -166,16 +231,62 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
 
             <div>
               <label className="block text-xs font-semibold text-zinc-700 uppercase tracking-wider font-mono mb-1">
-                Training Provider *
+                Training Provider
               </label>
               <input
                 type="text"
-                required
                 placeholder="e.g. Apex Academy Global"
                 value={formData.provider || ''}
                 onChange={(e) => setFormData({ ...formData, provider: e.target.value })}
                 className="w-full text-xs px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:bg-white text-zinc-900"
               />
+            </div>
+          </div>
+
+          {/* Event Links */}
+          <div>
+            <label className="block text-xs font-semibold text-zinc-700 uppercase tracking-wider font-mono mb-1">
+              Event Links
+            </label>
+            <div className="space-y-2">
+              {(formData.links || []).map((link, i) => {
+                const update = (patch: Partial<EventLink>) =>
+                  setFormData({ ...formData, links: (formData.links || []).map((l, j) => (j === i ? { ...l, ...patch } : l)) });
+                return (
+                  <div key={i} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="Label, e.g. Registration form"
+                      value={link.label}
+                      onChange={(e) => update({ label: e.target.value })}
+                      className="w-2/5 text-xs px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:bg-white text-zinc-900"
+                    />
+                    <input
+                      type="text"
+                      placeholder="https://..."
+                      value={link.url}
+                      onChange={(e) => update({ url: e.target.value })}
+                      className="flex-1 min-w-0 text-xs px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:bg-white text-zinc-900"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, links: (formData.links || []).filter((_, j) => j !== i) })}
+                      className="p-1.5 rounded text-zinc-400 hover:text-red-600 hover:bg-red-50"
+                      title="Remove link"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, links: [...(formData.links || []), { label: '', url: '' }] })}
+                className="flex items-center gap-1 text-xs font-medium text-zinc-600 hover:text-zinc-900"
+              >
+                <LinkIcon className="w-3.5 h-3.5" />
+                <span>+ Add link</span>
+              </button>
             </div>
           </div>
 
@@ -266,11 +377,25 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
               <input
                 type="number"
                 min="1"
-                value={formData.attendeesCount || 30}
+                value={formData.attendeesCount || ''}
                 onChange={(e) => setFormData({ ...formData, attendeesCount: Number(e.target.value) })}
                 className="w-full text-xs px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:bg-white text-zinc-900"
               />
             </div>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="block text-xs font-semibold text-zinc-700 uppercase tracking-wider font-mono mb-1">
+              Notes
+            </label>
+            <textarea
+              rows={3}
+              placeholder="Contact person, special requests, anything to remember..."
+              value={formData.notes || ''}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              className="w-full text-xs px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:bg-white text-zinc-900 resize-none"
+            />
           </div>
 
           {/* Modal Footer */}

@@ -1,15 +1,10 @@
 -- ====================================================================
 -- TRAINER MANAGEMENT DASHBOARD - SUPABASE / POSTGRESQL SCHEMA
--- Ready to run directly in the Supabase SQL Editor Console
--- Compatible with PostgreSQL 15+ / Supabase
--- All tables are namespaced with "dashboard_" prefix
+-- Short, human-readable IDs (e.g. 'proj-1', 'task-101', 'intern-1')
+-- All tables namespaced with "dashboard_" prefix
 -- ====================================================================
 
--- 1. Enable Cryptographic & UUID Extensions
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
-
--- 2. Custom Enumerations (Type-Safe Workflow States & Roles)
+-- 1. Custom Enumerations (Type-Safe Workflow States & Roles)
 DO $$ BEGIN
     CREATE TYPE user_role_enum AS ENUM ('admin', 'lead_trainer', 'intern', 'viewer');
 EXCEPTION
@@ -34,9 +29,9 @@ EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
--- 3. Users Table (Interns, Trainers, Admins)
+-- 2. Users Table (Interns, Trainers, Admins)
 CREATE TABLE IF NOT EXISTS dashboard_users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id VARCHAR(50) PRIMARY KEY DEFAULT ('usr_' || substr(md5(random()::text), 1, 8)),
     email VARCHAR(255) UNIQUE NOT NULL,
     full_name VARCHAR(150) NOT NULL,
     role user_role_enum NOT NULL DEFAULT 'intern',
@@ -49,32 +44,32 @@ CREATE TABLE IF NOT EXISTS dashboard_users (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 4. Projects Table (Training Events & D-Days)
+-- 3. Projects Table (Training Events & D-Days)
 CREATE TABLE IF NOT EXISTS dashboard_projects (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id VARCHAR(50) PRIMARY KEY DEFAULT ('proj_' || substr(md5(random()::text), 1, 8)),
     name VARCHAR(255) NOT NULL,
     d_day DATE NOT NULL,
     company_name VARCHAR(200) NOT NULL,
     slogan VARCHAR(255),
     training_provider VARCHAR(200) NOT NULL,
-    storage_url TEXT,                      -- Link to cloud files (Google Drive, Dropbox, etc.)
-    evaluation_qr_code_url TEXT,          -- Image URL / Base64 for feedback survey QR
+    storage_url TEXT,                      -- Cloud drive / materials folder link
+    evaluation_qr_code_url TEXT,          -- Image URL / SVG data for feedback survey QR
     location VARCHAR(255),
     attendees_count INT DEFAULT 0,
     status project_status_enum NOT NULL DEFAULT 'in_progress',
     notes TEXT,
-    created_by UUID REFERENCES dashboard_users(id) ON DELETE SET NULL,
+    created_by VARCHAR(50) REFERENCES dashboard_users(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 5. Checklist Tasks Table (Actionable Items)
+-- 4. Checklist Tasks Table (Actionable Items)
 CREATE TABLE IF NOT EXISTS dashboard_checklist_tasks (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID NOT NULL REFERENCES dashboard_projects(id) ON DELETE CASCADE,
+    id VARCHAR(50) PRIMARY KEY DEFAULT ('task_' || substr(md5(random()::text), 1, 8)),
+    project_id VARCHAR(50) NOT NULL REFERENCES dashboard_projects(id) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
     description TEXT,
-    assigned_intern_id UUID REFERENCES dashboard_users(id) ON DELETE SET NULL, -- NULL = Master Backlog
+    assigned_intern_id VARCHAR(50) REFERENCES dashboard_users(id) ON DELETE SET NULL, -- NULL = Master Backlog
     state task_state_enum NOT NULL DEFAULT 'not_started',
     priority task_priority_enum NOT NULL DEFAULT 'medium',
     phase VARCHAR(100) NOT NULL DEFAULT 'Curriculum & Slides',
@@ -88,17 +83,17 @@ CREATE TABLE IF NOT EXISTS dashboard_checklist_tasks (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 6. Task Review Logs (Audit Trail for Admin Sign-Offs)
+-- 5. Task Review Logs (Audit Trail for Admin Sign-Offs)
 CREATE TABLE IF NOT EXISTS dashboard_task_reviews (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    task_id UUID NOT NULL REFERENCES dashboard_checklist_tasks(id) ON DELETE CASCADE,
-    reviewed_by UUID NOT NULL REFERENCES dashboard_users(id) ON DELETE CASCADE,
+    id VARCHAR(50) PRIMARY KEY DEFAULT ('rev_' || substr(md5(random()::text), 1, 8)),
+    task_id VARCHAR(50) NOT NULL REFERENCES dashboard_checklist_tasks(id) ON DELETE CASCADE,
+    reviewed_by VARCHAR(50) NOT NULL REFERENCES dashboard_users(id) ON DELETE CASCADE,
     decision VARCHAR(50) NOT NULL,         -- 'approved', 'revision_requested'
     feedback_notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 7. High-Performance Indexes
+-- 6. High-Performance Indexes
 CREATE INDEX IF NOT EXISTS idx_dashboard_tasks_project_id ON dashboard_checklist_tasks(project_id);
 CREATE INDEX IF NOT EXISTS idx_dashboard_tasks_assigned_intern ON dashboard_checklist_tasks(assigned_intern_id);
 CREATE INDEX IF NOT EXISTS idx_dashboard_tasks_state ON dashboard_checklist_tasks(state);
@@ -106,9 +101,8 @@ CREATE INDEX IF NOT EXISTS idx_dashboard_projects_d_day ON dashboard_projects(d_
 CREATE INDEX IF NOT EXISTS idx_dashboard_projects_status ON dashboard_projects(status);
 CREATE INDEX IF NOT EXISTS idx_dashboard_users_role ON dashboard_users(role);
 
--- 8. Algorithmic Health Score Real-Time View
+-- 7. Algorithmic Health Score Real-Time View
 -- Formula: Days until D-Day ÷ Remaining Unfinished Tasks
--- Projects with lowest health_score (most urgent) sort to top.
 CREATE OR REPLACE VIEW dashboard_view_project_health_scores AS
 WITH task_aggregates AS (
     SELECT 
@@ -162,7 +156,7 @@ SELECT
 FROM task_aggregates
 ORDER BY health_score ASC;
 
--- 9. Automatic Updated-At Timestamps Trigger
+-- 8. Automatic Updated-At Timestamps Trigger
 CREATE OR REPLACE FUNCTION trigger_set_timestamp()
 RETURNS TRIGGER AS $$
 BEGIN

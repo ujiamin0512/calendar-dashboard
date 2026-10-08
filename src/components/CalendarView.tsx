@@ -3,10 +3,11 @@ import {
   ChevronLeft, ChevronRight, Calendar as CalendarIcon, 
   Clock, Plus, Filter, AlertCircle, CheckCircle2 
 } from 'lucide-react';
-import { TrainingProject, ChecklistTask } from '../types';
+import { TrainingProject, ChecklistTask, Meeting, EventType } from '../types';
+import { styleOf } from '../utils/eventCategories';
 import { 
   getCalendarGrid, MONTH_NAMES, WEEKDAY_NAMES, 
-  calculateProjectHealth, formatDateString 
+  calculateProjectHealth, formatDateString, eventLength, formatProjectDates 
 } from '../utils/date';
 
 interface CalendarViewProps {
@@ -14,13 +15,31 @@ interface CalendarViewProps {
   tasks: ChecklistTask[];
   onSelectProject: (project: TrainingProject) => void;
   onQuickAddDate: (dateString: string) => void;
+  meetings: Meeting[];
+  onAddMeeting: (dateString: string) => void;
+  onSelectMeeting: (meeting: Meeting) => void;
+  eventTypes: EventType[];
+  onManageEventTypes: () => void;
 }
+
+// "14:30" -> "2:30pm"
+const formatTime = (t?: string) => {
+  if (!t) return '';
+  const [h, m] = t.split(':').map(Number);
+  const suffix = h >= 12 ? 'pm' : 'am';
+  return `${h % 12 || 12}${m ? `:${String(m).padStart(2, '0')}` : ''}${suffix}`;
+};
 
 export const CalendarView: React.FC<CalendarViewProps> = ({
   projects,
   tasks,
   onSelectProject,
   onQuickAddDate,
+  meetings,
+  onAddMeeting,
+  onSelectMeeting,
+  eventTypes,
+  onManageEventTypes,
 }) => {
   // Today's date reference
   const today = new Date();
@@ -29,6 +48,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const [filterUrgentOnly, setFilterUrgentOnly] = useState<boolean>(false);
 
   const calendarDays = getCalendarGrid(currentYear, currentMonth);
+  const weeks = Array.from({ length: calendarDays.length / 7 }, (_, i) => calendarDays.slice(i * 7, i * 7 + 7));
+
+  const projectEnd = (p: TrainingProject) => (p.endDate && p.endDate > p.dDay ? p.endDate : p.dDay);
+  const visibleProjects = filterUrgentOnly
+    ? projects.filter(p => {
+        const m = calculateProjectHealth(p, tasks);
+        return m.urgencyLevel === 'critical' || m.urgencyLevel === 'urgent';
+      })
+    : projects;
 
   const handlePrevMonth = () => {
     if (currentMonth === 0) {
@@ -103,6 +131,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             <span>Urgent D-Days Only</span>
           </button>
 
+          <button
+            onClick={onManageEventTypes}
+            className="px-3 py-1 rounded-md border bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50 transition-colors"
+            title="Add, rename, recolour or delete event types"
+          >
+            Event Types
+          </button>
+
           <div className="hidden sm:flex items-center space-x-3 pl-3 border-l border-zinc-200 text-zinc-500 font-mono text-[11px]">
             <span className="flex items-center space-x-1">
               <span className="w-2.5 h-2.5 rounded-xs bg-red-500 inline-block"></span>
@@ -129,66 +165,125 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         ))}
       </div>
 
-      {/* Calendar Grid - 35 or 42 cells */}
-      <div className="grid grid-cols-7 flex-1 auto-rows-fr bg-zinc-200 gap-px overflow-y-auto">
-        {calendarDays.map((cell) => {
-          const isToday = cell.dateString === todayString;
-          
-          // Projects on this date
-          let dayProjects = projects.filter(p => p.dDay === cell.dateString);
-          if (filterUrgentOnly) {
-            dayProjects = dayProjects.filter(p => {
-              const m = calculateProjectHealth(p, tasks);
-              return m.urgencyLevel === 'critical' || m.urgencyLevel === 'urgent';
-            });
-          }
+      {/* Calendar Grid: one row per week, multi-day events span across days */}
+      <div className="flex-1 flex flex-col bg-zinc-200 gap-px overflow-y-auto">
+        {weeks.map((week) => {
+          const weekStart = week[0].dateString;
+          const weekEnd = week[6].dateString;
+          const colOf = (date: string) => week.findIndex(c => c.dateString === date);
 
-          // Tasks due on this date
-          const dayTasks = tasks.filter(t => t.dueDate === cell.dateString && t.state !== 'completed');
+          // Event segments in this week, packed into lanes so they never overlap
+          const segments = visibleProjects
+            .filter(p => p.dDay <= weekEnd && projectEnd(p) >= weekStart)
+            .map(p => {
+              const segStart = p.dDay < weekStart ? weekStart : p.dDay;
+              const segEnd = projectEnd(p) > weekEnd ? weekEnd : projectEnd(p);
+              const col = colOf(segStart);
+              return { project: p, col, span: colOf(segEnd) - col + 1, startsHere: p.dDay >= weekStart, endsHere: projectEnd(p) <= weekEnd };
+            })
+            .sort((a, b) => a.col - b.col || b.span - a.span);
+
+          // Other events in this week: by start day, all-day (longest first), then by time
+          const meetingEnd = (m: Meeting) => (m.allDay && m.endDate && m.endDate > m.date ? m.endDate : m.date);
+          const weekMeetings = (filterUrgentOnly ? [] : meetings)
+            .filter(m => m.date <= weekEnd && meetingEnd(m) >= weekStart)
+            .map(m => {
+              const segStart = m.date < weekStart ? weekStart : m.date;
+              const segEnd = meetingEnd(m) > weekEnd ? weekEnd : meetingEnd(m);
+              const col = colOf(segStart);
+              return { meeting: m, col, span: colOf(segEnd) - col + 1, startsHere: m.date >= weekStart, endsHere: meetingEnd(m) <= weekEnd };
+            })
+            .sort((a, b) =>
+              a.col - b.col ||
+              Number(b.meeting.allDay) - Number(a.meeting.allDay) ||
+              b.span - a.span ||
+              (a.meeting.startTime || '').localeCompare(b.meeting.startTime || '')
+            );
+
+          // Pack items into lanes (rows) so nothing overlaps; projects take the top lanes
+          const occupied: boolean[][] = [];
+          const takeLane = (col: number, span: number) => {
+            let lane = 0;
+            while (occupied[lane]?.slice(col, col + span).some(Boolean)) lane++;
+            occupied[lane] = occupied[lane] || Array(7).fill(false);
+            for (let c = col; c < col + span; c++) occupied[lane][c] = true;
+            return lane;
+          };
+          const placed = segments.map(seg => ({ ...seg, lane: takeLane(seg.col, seg.span) }));
+          const placedMeetings = weekMeetings.map(seg => ({ ...seg, lane: takeLane(seg.col, seg.span) }));
 
           return (
-            <div
-              key={cell.dateString}
-              onClick={() => onQuickAddDate(cell.dateString)}
-              className={`bg-white p-2 min-h-[95px] flex flex-col justify-between group transition-colors hover:bg-zinc-50/70 cursor-pointer ${
-                !cell.isCurrentMonth ? 'bg-zinc-50/40 text-zinc-400' : 'text-zinc-800'
-              } ${isToday ? 'ring-1 ring-inset ring-zinc-900 bg-zinc-50/60' : ''}`}
-            >
-              {/* Day header */}
-              <div className="flex items-center justify-between mb-1">
-                <span
-                  className={`text-xs font-mono font-medium inline-flex items-center justify-center w-6 h-6 rounded-full ${
-                    isToday
-                      ? 'bg-zinc-900 text-white font-bold'
-                      : cell.isCurrentMonth
-                      ? 'text-zinc-700'
-                      : 'text-zinc-400'
-                  }`}
-                >
-                  {cell.dayNumber}
-                </span>
+            <div key={weekStart} className="relative flex-1 min-h-[110px]">
+              {/* Day cells (background) */}
+              <div className="absolute inset-0 grid grid-cols-7 gap-px">
+                {week.map((cell) => {
+                  const isToday = cell.dateString === todayString;
+                  const dayTasks = tasks.filter(t => t.dueDate === cell.dateString && t.state !== 'completed');
 
-                {/* Day tasks indicator if any */}
-                {dayTasks.length > 0 && (
-                  <span 
-                    title={`${dayTasks.length} task(s) due today`}
-                    className="text-[10px] font-mono text-zinc-500 flex items-center space-x-0.5"
-                  >
-                    <Clock className="w-2.5 h-2.5 text-zinc-400" />
-                    <span>{dayTasks.length}</span>
-                  </span>
-                )}
+                  return (
+                    <div
+                      key={cell.dateString}
+                      onClick={() => onQuickAddDate(cell.dateString)}
+                      className={`bg-white p-2 flex flex-col justify-between group transition-colors hover:bg-zinc-50/70 cursor-pointer ${
+                        !cell.isCurrentMonth ? 'bg-zinc-50/40 text-zinc-400' : 'text-zinc-800'
+                      } ${isToday ? 'ring-1 ring-inset ring-zinc-900 bg-zinc-50/60' : ''}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span
+                          className={`text-xs font-mono font-medium inline-flex items-center justify-center w-6 h-6 rounded-full ${
+                            isToday
+                              ? 'bg-zinc-900 text-white font-bold'
+                              : cell.isCurrentMonth
+                              ? 'text-zinc-700'
+                              : 'text-zinc-400'
+                          }`}
+                        >
+                          {cell.dayNumber}
+                        </span>
+
+                        {dayTasks.length > 0 && (
+                          <span
+                            title={`${dayTasks.length} task(s) on this day`}
+                            className="text-[10px] font-mono text-zinc-500 flex items-center space-x-0.5"
+                          >
+                            <Clock className="w-2.5 h-2.5 text-zinc-400" />
+                            <span>{dayTasks.length}</span>
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity flex justify-end gap-1.5">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onAddMeeting(cell.dateString); }}
+                          className="text-[9px] font-mono text-zinc-400 hover:text-zinc-900 flex items-center"
+                          title="Add a meeting or other event on this day"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Event</span>
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onQuickAddDate(cell.dateString); }}
+                          className="text-[9px] font-mono text-zinc-400 hover:text-zinc-900 flex items-center"
+                          title="Add a training project on this day"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Project</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
-              {/* Project Events & D-Day Blocks */}
-              <div className="space-y-1.5 flex-1">
-                {dayProjects.map(proj => {
+              {/* Event bars (foreground) */}
+              <div className="relative grid grid-cols-7 gap-x-px gap-y-1.5 pt-9 pb-6 pointer-events-none">
+                {placed.map(({ project: proj, col, span, lane, startsHere, endsHere }) => {
                   const metrics = calculateProjectHealth(proj, tasks);
-                  
+
                   // Color styling based on D-day countdown & urgency
                   const isCritical = metrics.daysUntilDDay <= 3;
                   const isUrgent = metrics.daysUntilDDay <= 7 && !isCritical;
-                  
+
                   const blockBg = isCritical
                     ? 'bg-red-50 hover:bg-red-100 border-red-300 text-red-950'
                     : isUrgent
@@ -203,22 +298,25 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     ? 'bg-amber-600 text-white'
                     : 'bg-zinc-800 text-white';
 
+                  const totalDays = eventLength(proj);
+
                   return (
                     <div
                       key={proj.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSelectProject(proj);
-                      }}
-                      className={`px-2 py-1.5 rounded-md border text-left transition-all shadow-2xs cursor-pointer ${blockBg}`}
+                      style={{ gridColumn: `${col + 1} / span ${span}`, gridRow: lane + 1 }}
+                      onClick={() => onSelectProject(proj)}
+                      title={totalDays > 1 ? `${proj.name} · ${formatProjectDates(proj)}` : proj.name}
+                      className={`pointer-events-auto px-2 py-1.5 border text-left transition-all shadow-2xs cursor-pointer min-w-0 ${blockBg} ${
+                        startsHere ? 'ml-1.5 rounded-l-md' : 'border-l-0'
+                      } ${endsHere ? 'mr-1.5 rounded-r-md' : 'border-r-0'}`}
                     >
                       <div className="flex items-center justify-between gap-1 mb-0.5">
                         <span className="text-[10px] font-bold uppercase font-mono tracking-tight truncate">
-                          {proj.company}
+                          {!startsHere && '← '}{proj.kind === 'team_building' && <span className="mr-1 px-1 rounded bg-white/70 ring-1 ring-black/10">TB</span>}{proj.company}
                         </span>
-                        <span className={`text-[9px] font-mono px-1 py-0.2 rounded font-bold ${badgeBg}`}>
-                          {metrics.daysUntilDDay <= 0 
-                            ? (metrics.daysUntilDDay === 0 ? 'D-DAY' : `D+${Math.abs(metrics.daysUntilDDay)}`) 
+                        <span className={`text-[9px] font-mono px-1 py-0.2 rounded font-bold shrink-0 ${badgeBg}`}>
+                          {metrics.daysUntilDDay <= 0
+                            ? (metrics.daysUntilDDay === 0 ? 'D-DAY' : `D+${Math.abs(metrics.daysUntilDDay)}`)
                             : `D-${metrics.daysUntilDDay}`}
                         </span>
                       </div>
@@ -227,22 +325,37 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         {proj.name}
                       </div>
 
-                      {/* Micro progress indicator */}
-                      <div className="flex items-center justify-between mt-1 text-[9px] font-mono text-zinc-600">
-                        <span>{metrics.completedTasks}/{metrics.totalTasks} done</span>
-                        <span>Score: {metrics.healthScore >= 999 ? '100%' : metrics.healthScore}</span>
+                      <div className="flex items-center justify-between gap-2 mt-1 text-[9px] font-mono text-zinc-600">
+                        <span className="truncate">
+                          {metrics.completedTasks}/{metrics.totalTasks} done
+                          {totalDays > 1 && ` · ${totalDays} days`}
+                        </span>
+                        <span className="shrink-0">Score: {metrics.totalTasks === 0 ? '–' : metrics.healthScore >= 999 ? '100%' : metrics.healthScore}</span>
                       </div>
                     </div>
                   );
                 })}
-              </div>
 
-              {/* Hover add trigger */}
-              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex justify-end pt-1">
-                <span className="text-[10px] text-zinc-400 flex items-center space-x-0.5">
-                  <Plus className="w-3 h-3" />
-                  <span className="font-mono text-[9px]">Add</span>
-                </span>
+                {placedMeetings.map(({ meeting: m, col, span, lane, startsHere, endsHere }) => {
+                  const cat = styleOf(eventTypes, m.category);
+                  return (
+                    <div
+                      key={m.id}
+                      style={{ gridColumn: `${col + 1} / span ${span}`, gridRow: lane + 1 }}
+                      onClick={() => onSelectMeeting(m)}
+                      title={[cat.label, m.title, m.allDay ? 'All day' : `${formatTime(m.startTime)} – ${formatTime(m.endTime)}`, m.location].filter(Boolean).join(' · ')}
+                      className={`pointer-events-auto px-1.5 py-0.5 text-[10px] leading-tight cursor-pointer truncate min-w-0 ${
+                        m.allDay
+                          ? `border ${cat.bar} ${startsHere ? 'ml-1.5 rounded-l' : 'border-l-0'} ${endsHere ? 'mr-1.5 rounded-r' : 'border-r-0'}`
+                          : `mx-1.5 rounded hover:bg-zinc-100 flex items-center gap-1 ${cat.text}`
+                      }`}
+                    >
+                      {!m.allDay && <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cat.dot}`} />}
+                      {!m.allDay && <span className="font-mono text-zinc-500 shrink-0">{formatTime(m.startTime)}</span>}
+                      <span className="font-medium truncate">{!startsHere && '← '}{m.title}</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           );

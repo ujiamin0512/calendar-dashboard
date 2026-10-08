@@ -7,22 +7,61 @@ import { SlideOutPanel } from './components/SlideOutPanel';
 import { ProjectModal } from './components/ProjectModal';
 import { TaskModal } from './components/TaskModal';
 import { InternModal } from './components/InternModal';
-import { AdminReviewModal } from './components/AdminReviewModal';
-import { NeonSqlModal } from './components/NeonSqlModal';
 import { QrCodeModal } from './components/QrCodeModal';
+import { MeetingModal } from './components/MeetingModal';
+import { EventTypesModal } from './components/EventTypesModal';
+import { DEFAULT_EVENT_TYPES } from './utils/eventCategories';
+import { withCalendarImport, markCalendarImported, withEventsImport, markEventsImported } from './data/calendarImport';
 import { FloatingActionButton } from './components/FloatingActionButton';
-import { INITIAL_PROJECTS, INITIAL_INTERNS, INITIAL_TASKS } from './data/initialData';
-import { TrainingProject, Intern, ChecklistTask, TaskState } from './types';
+import { INITIAL_INTERNS } from './data/initialData';
+
+// Old demo projects (and their tasks) that may still be saved in a browser
+const DEMO_PROJECT_IDS = ['proj-1', 'proj-2', 'proj-3'];
+import { TrainingProject, Intern, ChecklistTask, TaskState, Meeting, EventCategory, EventType, ProjectKind } from './types';
 import { RotateCcw } from 'lucide-react';
+
+const buildProject = (data: Partial<TrainingProject>): TrainingProject => ({
+  id: `proj-${Date.now()}`,
+  kind: data.kind || 'training',
+  name: data.name || 'Untitled Project',
+  dDay: data.dDay || new Date().toISOString().slice(0, 10),
+  endDate: data.endDate || undefined,
+  company: data.company || '',
+  slogan: data.slogan || '',
+  provider: data.provider || '',
+  storageUrl: data.storageUrl || '',
+  links: data.links || [],
+  evaluationQrCode: data.evaluationQrCode || '',
+  location: data.location || '',
+  attendeesCount: data.attendeesCount || 0,
+  notes: data.notes || '',
+  status: 'in_progress',
+  createdAt: new Date().toISOString(),
+});
+
+const buildMeeting = (data: Partial<Meeting>): Meeting => ({
+  id: `meet-${Date.now()}`,
+  title: data.title || 'Event',
+  category: data.category || 'meeting',
+  date: data.date || new Date().toISOString().slice(0, 10),
+  endDate: data.endDate,
+  allDay: !!data.allDay,
+  startTime: data.startTime,
+  endTime: data.endTime,
+  location: data.location || '',
+  notes: data.notes || '',
+  createdAt: new Date().toISOString(),
+});
 
 export default function App() {
   // State with LocalStorage Persistence
   const [projects, setProjects] = useState<TrainingProject[]>(() => {
     try {
       const saved = localStorage.getItem('trainer_hub_projects');
-      return saved ? JSON.parse(saved) : INITIAL_PROJECTS;
+      const list: TrainingProject[] = saved ? JSON.parse(saved) : [];
+      return withCalendarImport(list.filter(p => !DEMO_PROJECT_IDS.includes(p.id)));
     } catch {
-      return INITIAL_PROJECTS;
+      return withCalendarImport([]);
     }
   });
 
@@ -38,14 +77,33 @@ export default function App() {
   const [tasks, setTasks] = useState<ChecklistTask[]>(() => {
     try {
       const saved = localStorage.getItem('trainer_hub_tasks');
-      return saved ? JSON.parse(saved) : INITIAL_TASKS;
+      const list: ChecklistTask[] = saved ? JSON.parse(saved) : [];
+      return list.filter(t => !DEMO_PROJECT_IDS.includes(t.projectId));
     } catch {
-      return INITIAL_TASKS;
+      return [];
+    }
+  });
+
+  const [meetings, setMeetings] = useState<Meeting[]>(() => {
+    try {
+      const saved = localStorage.getItem('trainer_hub_meetings');
+      return withEventsImport(saved ? JSON.parse(saved) : []);
+    } catch {
+      return withEventsImport([]);
+    }
+  });
+
+  const [eventTypes, setEventTypes] = useState<EventType[]>(() => {
+    try {
+      const saved = localStorage.getItem('trainer_hub_event_types');
+      return saved ? JSON.parse(saved) : DEFAULT_EVENT_TYPES;
+    } catch {
+      return DEFAULT_EVENT_TYPES;
     }
   });
 
   // Views & Navigation
-  const [currentView, setCurrentView] = useState<'calendar' | 'projects' | 'dispatcher' | 'neon-schema'>('calendar');
+  const [currentView, setCurrentView] = useState<'calendar' | 'projects' | 'dispatcher'>('calendar');
 
   // Slide-out Drawer Panel State
   const [selectedSlideProject, setSelectedSlideProject] = useState<TrainingProject | null>(null);
@@ -61,7 +119,12 @@ export default function App() {
   const [taskModalDefaults, setTaskModalDefaults] = useState<{ projectId?: string; internId?: string | null }>({});
 
   const [internModalOpen, setInternModalOpen] = useState(false);
-  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [meetingModalOpen, setMeetingModalOpen] = useState(false);
+  const [eventTypesOpen, setEventTypesOpen] = useState(false);
+  const [editingMeeting, setEditingMeeting] = useState<Meeting | null>(null);
+  const [meetingDefaultDate, setMeetingDefaultDate] = useState<string | undefined>(undefined);
+  const [meetingPrefill, setMeetingPrefill] = useState<Partial<Meeting> | undefined>(undefined);
+  const [projectPrefill, setProjectPrefill] = useState<Partial<TrainingProject> | undefined>(undefined);
   const [qrModalProject, setQrModalProject] = useState<TrainingProject | null>(null);
 
   // Dispatcher Project Filter
@@ -70,6 +133,7 @@ export default function App() {
   // Sync to LocalStorage
   useEffect(() => {
     localStorage.setItem('trainer_hub_projects', JSON.stringify(projects));
+    markCalendarImported();
   }, [projects]);
 
   useEffect(() => {
@@ -80,22 +144,31 @@ export default function App() {
     localStorage.setItem('trainer_hub_tasks', JSON.stringify(tasks));
   }, [tasks]);
 
-  // Pending reviews
-  const pendingReviewCount = tasks.filter(t => t.state === 'ready_for_review').length;
+  useEffect(() => {
+    localStorage.setItem('trainer_hub_meetings', JSON.stringify(meetings));
+    markEventsImported();
+  }, [meetings]);
+
+  useEffect(() => {
+    localStorage.setItem('trainer_hub_event_types', JSON.stringify(eventTypes));
+  }, [eventTypes]);
 
   // Reset sample data helper
   const handleResetData = () => {
-    if (confirm('Reset all projects, interns, and checklist tasks to original demo values?')) {
-      setProjects(INITIAL_PROJECTS);
-      setInterns(INITIAL_INTERNS);
-      setTasks(INITIAL_TASKS);
+    if (confirm('Delete ALL projects, tasks and meetings you have added and start over with the imported calendar projects? This cannot be undone.')) {
       localStorage.clear();
+      setProjects(withCalendarImport([]));
+      setInterns(INITIAL_INTERNS);
+      setTasks([]);
+      setMeetings(withEventsImport([]));
+      setEventTypes(DEFAULT_EVENT_TYPES);
     }
   };
 
   // --- CRUD: Projects ---
   const handleOpenNewProject = (defaultDate?: string) => {
     setEditingProject(null);
+    setProjectPrefill(undefined);
     setModalDefaultDate(defaultDate);
     setProjectModalOpen(true);
   };
@@ -112,22 +185,62 @@ export default function App() {
         setSelectedSlideProject(prev => prev ? { ...prev, ...formData } as TrainingProject : null);
       }
     } else {
-      const newProj: TrainingProject = {
-        id: `proj-${Date.now()}`,
-        name: formData.name || 'Untitled Project',
-        dDay: formData.dDay || new Date().toISOString().slice(0, 10),
-        company: formData.company || 'Client',
-        slogan: formData.slogan || '',
-        provider: formData.provider || 'Apex Academy',
-        storageUrl: formData.storageUrl || '',
-        evaluationQrCode: formData.evaluationQrCode || '',
-        location: formData.location || 'Main Training Hall',
-        attendeesCount: formData.attendeesCount || 30,
-        status: 'in_progress',
-        createdAt: new Date().toISOString(),
-      };
-      setProjects(prev => [newProj, ...prev]);
+      setProjects(prev => [buildProject(formData), ...prev]);
     }
+  };
+
+  // --- Converting between training projects and calendar events ---
+  const handleSwitchProjectToEvent = (draft: Partial<TrainingProject>, category: EventCategory) => {
+    const fields: Partial<Meeting> = {
+      title: draft.name || '',
+      category,
+      date: draft.dDay,
+      endDate: draft.endDate,
+      allDay: true,
+      location: draft.location || '',
+      notes: [
+        draft.company && `Client: ${draft.company}`,
+        draft.notes,
+        ...(draft.links || []).map(l => (l.label ? `${l.label}: ${l.url}` : l.url)),
+      ].filter(Boolean).join('\n'),
+    };
+    setProjectModalOpen(false);
+    if (editingProject) {
+      const meeting = buildMeeting(fields);
+      setMeetings(prev => [...prev, meeting]);
+      setProjects(prev => prev.filter(p => p.id !== editingProject.id));
+      setTasks(prev => prev.filter(t => t.projectId !== editingProject.id));
+      if (selectedSlideProject?.id === editingProject.id) setIsSlideOpen(false);
+      setEditingProject(null);
+      setEditingMeeting(meeting);
+    } else {
+      setEditingMeeting(null);
+      setMeetingPrefill(fields);
+    }
+    setMeetingModalOpen(true);
+  };
+
+  const handleSwitchEventToProject = (draft: Partial<Meeting>, kind: ProjectKind) => {
+    const fields: Partial<TrainingProject> = {
+      kind,
+      name: draft.title || '',
+      dDay: draft.date,
+      endDate: draft.allDay ? draft.endDate : undefined,
+      location: draft.location || '',
+      notes: [!draft.allDay && draft.startTime && `Time: ${draft.startTime}–${draft.endTime}`, draft.notes].filter(Boolean).join('\n'),
+    };
+    setMeetingModalOpen(false);
+    if (editingMeeting) {
+      const project = buildProject(fields);
+      setProjects(prev => [project, ...prev]);
+      setMeetings(prev => prev.filter(m => m.id !== editingMeeting.id));
+      setEditingMeeting(null);
+      setEditingProject(project);
+    } else {
+      setEditingProject(null);
+      setProjectPrefill(fields);
+    }
+    setProjectModalOpen(true);
   };
 
   const handleDeleteProject = (projectId: string) => {
@@ -138,6 +251,38 @@ export default function App() {
         setIsSlideOpen(false);
       }
     }
+  };
+
+  // --- CRUD: Meetings ---
+  const handleOpenNewMeeting = (date?: string) => {
+    setEditingMeeting(null);
+    setMeetingPrefill(undefined);
+    setMeetingDefaultDate(date);
+    setMeetingModalOpen(true);
+  };
+
+  const handleSaveMeeting = (data: Partial<Meeting>) => {
+    if (editingMeeting) {
+      setMeetings(prev => prev.map(m => m.id === editingMeeting.id ? { ...m, ...data } as Meeting : m));
+    } else {
+      setMeetings(prev => [...prev, buildMeeting(data)]);
+    }
+  };
+
+  // Events whose type was deleted move to the first remaining type
+  const handleSaveEventTypes = (types: EventType[]) => {
+    setEventTypes(types);
+    setMeetings(prev => prev.map(m => (types.some(t => t.id === (m.category || 'meeting')) ? m : { ...m, category: types[0].id })));
+  };
+
+  const eventTypeUsage = meetings.reduce<Record<string, number>>((acc, m) => {
+    const id = m.category || 'meeting';
+    acc[id] = (acc[id] || 0) + 1;
+    return acc;
+  }, {});
+
+  const handleDeleteMeeting = (meetingId: string) => {
+    setMeetings(prev => prev.filter(m => m.id !== meetingId));
   };
 
   // --- CRUD: Interns ---
@@ -186,11 +331,8 @@ export default function App() {
         description: formData.description || '',
         assignedInternId: formData.assignedInternId ?? null,
         state: formData.state || 'not_started',
-        priority: formData.priority || 'medium',
-        phase: formData.phase || 'Curriculum & Slides',
         dueDate: formData.dueDate || new Date().toISOString().slice(0, 10),
-        estimatedMinutes: formData.estimatedMinutes || 60,
-        reviewNotes: formData.reviewNotes || '',
+        comments: [],
         createdAt: new Date().toISOString(),
       };
       setTasks(prev => [newTask, ...prev]);
@@ -212,29 +354,33 @@ export default function App() {
           ...t,
           state: newState,
           completedAt: newState === 'completed' ? new Date().toISOString() : undefined,
-          submittedAt: newState === 'ready_for_review' ? new Date().toISOString() : undefined,
         };
       }
       return t;
     }));
   };
 
-  // Review Approvals
-  const handleApproveTask = (taskId: string) => {
-    handleUpdateTaskState(taskId, 'completed');
+  // Quick-add from a project's checklist
+  const handleQuickAddTask = (projectId: string, title: string, description: string, internId: string | null, dueDate: string) => {
+    const newTask: ChecklistTask = {
+      id: `task-${Date.now()}`,
+      projectId,
+      title,
+      description,
+      assignedInternId: internId,
+      state: 'not_started',
+      dueDate,
+      comments: [],
+      createdAt: new Date().toISOString(),
+    };
+    setTasks(prev => [newTask, ...prev]);
   };
 
-  const handleRejectTask = (taskId: string, feedback: string) => {
-    setTasks(prev => prev.map(t => {
-      if (t.id === taskId) {
-        return {
-          ...t,
-          state: 'in_progress',
-          reviewNotes: feedback,
-        };
-      }
-      return t;
-    }));
+  const handleAddComment = (taskId: string, author: string, text: string) => {
+    setTasks(prev => prev.map(t => t.id === taskId ? {
+      ...t,
+      comments: [...(t.comments || []), { id: `c-${Date.now()}`, author, text, createdAt: new Date().toISOString() }],
+    } : t));
   };
 
   const handleOpenDispatcherForProject = (projectId: string) => {
@@ -248,8 +394,6 @@ export default function App() {
       <Header
         currentView={currentView}
         onViewChange={setCurrentView}
-        pendingReviewCount={pendingReviewCount}
-        onOpenReviewInbox={() => setReviewModalOpen(true)}
         onOpenInternsModal={() => setInternModalOpen(true)}
         onQuickAdd={() => handleOpenNewProject()}
       />
@@ -265,6 +409,14 @@ export default function App() {
               setIsSlideOpen(true);
             }}
             onQuickAddDate={(dateStr) => handleOpenNewProject(dateStr)}
+            meetings={meetings}
+            onAddMeeting={handleOpenNewMeeting}
+            eventTypes={eventTypes}
+            onManageEventTypes={() => setEventTypesOpen(true)}
+            onSelectMeeting={(meeting) => {
+              setEditingMeeting(meeting);
+              setMeetingModalOpen(true);
+            }}
           />
         )}
 
@@ -296,18 +448,14 @@ export default function App() {
             onEditTask={handleEditTask}
             onDeleteTask={handleDeleteTask}
             onNewTask={handleOpenNewTask}
-            onOpenReviewInbox={() => setReviewModalOpen(true)}
           />
-        )}
-
-        {currentView === 'neon-schema' && (
-          <NeonSqlModal />
         )}
       </main>
 
       {/* Floating Action Button (Speed dial) */}
       <FloatingActionButton
         onAddProject={() => handleOpenNewProject()}
+        onAddMeeting={() => handleOpenNewMeeting()}
         onAddTask={() => handleOpenNewTask()}
         onAddIntern={() => setInternModalOpen(true)}
       />
@@ -324,8 +472,10 @@ export default function App() {
           handleEditProject(proj);
         }}
         onOpenDispatcherForProject={handleOpenDispatcherForProject}
-        onAddTask={(projId) => handleOpenNewTask(projId)}
         onUpdateTaskState={handleUpdateTaskState}
+        onQuickAddTask={handleQuickAddTask}
+        onEditTask={handleEditTask}
+        onAddComment={handleAddComment}
       />
 
       {/* Modals */}
@@ -335,6 +485,10 @@ export default function App() {
         onSave={handleSaveProject}
         initialProject={editingProject}
         defaultDate={modalDefaultDate}
+        prefill={projectPrefill}
+        taskCount={editingProject ? tasks.filter(t => t.projectId === editingProject.id).length : 0}
+        onSwitchToEvent={handleSwitchProjectToEvent}
+        eventTypes={eventTypes}
       />
 
       <TaskModal
@@ -357,14 +511,25 @@ export default function App() {
         onDeleteIntern={handleDeleteIntern}
       />
 
-      <AdminReviewModal
-        isOpen={reviewModalOpen}
-        onClose={() => setReviewModalOpen(false)}
-        tasks={tasks}
-        interns={interns}
-        projects={projects}
-        onApproveTask={handleApproveTask}
-        onRejectTask={handleRejectTask}
+      <MeetingModal
+        isOpen={meetingModalOpen}
+        onClose={() => setMeetingModalOpen(false)}
+        onSave={handleSaveMeeting}
+        onDelete={handleDeleteMeeting}
+        initialMeeting={editingMeeting}
+        defaultDate={meetingDefaultDate}
+        prefill={meetingPrefill}
+        onSwitchToProject={handleSwitchEventToProject}
+        eventTypes={eventTypes}
+        onManageTypes={() => setEventTypesOpen(true)}
+      />
+
+      <EventTypesModal
+        isOpen={eventTypesOpen}
+        onClose={() => setEventTypesOpen(false)}
+        eventTypes={eventTypes}
+        usage={eventTypeUsage}
+        onSave={handleSaveEventTypes}
       />
 
       <QrCodeModal
@@ -385,10 +550,10 @@ export default function App() {
         <button
           onClick={handleResetData}
           className="hover:text-zinc-700 flex items-center space-x-1 transition-colors"
-          title="Restore original sample data"
+          title="Delete everything and start over"
         >
           <RotateCcw className="w-3 h-3" />
-          <span>Reset Sample Data</span>
+          <span>Reset All Data</span>
         </button>
       </footer>
     </div>

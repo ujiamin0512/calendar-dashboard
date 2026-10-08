@@ -33,12 +33,16 @@ export function calculateProjectHealth(
   const remainingTasks = totalTasks - completedTasks;
   const daysUntilDDay = calculateDaysUntilDDay(project.dDay);
 
-  const completionPercentage = totalTasks === 0 ? 100 : Math.round((completedTasks / totalTasks) * 100);
+  // No tasks yet = nothing done (not "100% complete")
+  const completionPercentage = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
 
   let healthScore: number;
   let urgencyLevel: ProjectHealthMetrics['urgencyLevel'];
 
-  if (remainingTasks === 0) {
+  if (totalTasks === 0) {
+    healthScore = 999;
+    urgencyLevel = 'healthy';
+  } else if (remainingTasks === 0) {
     healthScore = 999;
     urgencyLevel = 'completed';
   } else if (daysUntilDDay <= 0) {
@@ -148,3 +152,21 @@ export const MONTH_NAMES = [
 ];
 
 export const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+// "Oct 22, 2026" or "Oct 22 – Oct 24, 2026" for multi-day events
+export function formatProjectDates(project: { dDay: string; endDate?: string }): string {
+  if (!project.endDate || project.endDate <= project.dDay) return formatFriendlyDate(project.dDay);
+  const start = formatFriendlyDate(project.dDay).replace(/, \d{4}$/, '');
+  return `${start} – ${formatFriendlyDate(project.endDate)}`;
+}
+
+// 1-based day number of the event on `date`, or 0 if the event isn't on that date
+export function eventDayOn(project: { dDay: string; endDate?: string }, date: string): number {
+  const end = project.endDate && project.endDate > project.dDay ? project.endDate : project.dDay;
+  if (date < project.dDay || date > end) return 0;
+  return calculateDaysUntilDDay(date, new Date(project.dDay + 'T00:00:00')) + 1;
+}
+
+export function eventLength(project: { dDay: string; endDate?: string }): number {
+  return project.endDate && project.endDate > project.dDay ? eventDayOn(project, project.endDate) : 1;
+}

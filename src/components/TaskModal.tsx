@@ -3,7 +3,7 @@ import {
   X, CheckSquare, Calendar, User, AlertCircle, 
   Clock, Tag, Layers, AlignLeft 
 } from 'lucide-react';
-import { ChecklistTask, Intern, TrainingProject, TaskState, TaskPriority, TaskPhase } from '../types';
+import { ChecklistTask, Intern, TrainingProject, TaskState } from '../types';
 
 interface TaskModalProps {
   isOpen: boolean;
@@ -34,11 +34,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     projectId: defaultProjectId || projects[0]?.id || '',
     assignedInternId: defaultInternId ?? null,
     state: 'not_started',
-    priority: 'medium',
-    phase: 'Curriculum & Slides',
     dueDate: defaultDueDate || new Date().toISOString().slice(0, 10),
-    estimatedMinutes: 60,
-    reviewNotes: '',
   });
 
   useEffect(() => {
@@ -51,12 +47,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         projectId: defaultProjectId || projects[0]?.id || '',
         assignedInternId: defaultInternId ?? null,
         state: 'not_started',
-        priority: 'medium',
-        phase: 'Curriculum & Slides',
         dueDate: defaultDueDate || new Date().toISOString().slice(0, 10),
-        estimatedMinutes: 60,
-        reviewNotes: '',
-      });
+              });
     }
   }, [initialTask, defaultProjectId, defaultInternId, defaultDueDate, projects, isOpen]);
 
@@ -116,7 +108,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           {/* Project Association */}
           <div>
             <label className="block font-semibold text-zinc-700 uppercase tracking-wider font-mono mb-1">
-              Associated Training Project *
+              Project *
             </label>
             <select
               required
@@ -177,53 +169,15 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               >
                 <option value="not_started">Not Started</option>
                 <option value="in_progress">In Progress</option>
-                <option value="ready_for_review">Ready for Review (Admin Sign-off)</option>
                 <option value="completed">Completed</option>
               </select>
             </div>
           </div>
 
-          {/* Priority & Phase */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
+          {/* Task Date */}
+          <div>
               <label className="block font-semibold text-zinc-700 uppercase tracking-wider font-mono mb-1">
-                Priority Level
-              </label>
-              <select
-                value={formData.priority || 'medium'}
-                onChange={(e) => setFormData({ ...formData, priority: e.target.value as TaskPriority })}
-                className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:bg-white text-zinc-900"
-              >
-                <option value="urgent">Urgent (Red)</option>
-                <option value="high">High (Amber)</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block font-semibold text-zinc-700 uppercase tracking-wider font-mono mb-1">
-                Category / Phase
-              </label>
-              <select
-                value={formData.phase || 'Curriculum & Slides'}
-                onChange={(e) => setFormData({ ...formData, phase: e.target.value as TaskPhase })}
-                className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:bg-white text-zinc-900"
-              >
-                <option value="Curriculum & Slides">Curriculum & Slides</option>
-                <option value="Logistics & Venue">Logistics & Venue</option>
-                <option value="Tech & AV Setup">Tech & AV Setup</option>
-                <option value="Printouts & Badges">Printouts & Badges</option>
-                <option value="Post-Event Survey">Post-Event Survey</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Due Date & Duration */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block font-semibold text-zinc-700 uppercase tracking-wider font-mono mb-1">
-                Target Due Date
+                Task Date
               </label>
               <input
                 type="date"
@@ -231,38 +185,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
                 className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:bg-white text-zinc-900"
               />
-            </div>
-
-            <div>
-              <label className="block font-semibold text-zinc-700 uppercase tracking-wider font-mono mb-1">
-                Estimated Minutes
-              </label>
-              <input
-                type="number"
-                step="15"
-                min="15"
-                value={formData.estimatedMinutes || 60}
-                onChange={(e) => setFormData({ ...formData, estimatedMinutes: Number(e.target.value) })}
-                className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:bg-white text-zinc-900"
-              />
-            </div>
           </div>
-
-          {/* Review Notes (if in review or completed) */}
-          {(formData.state === 'ready_for_review' || formData.reviewNotes) && (
-            <div>
-              <label className="block font-semibold text-zinc-700 uppercase tracking-wider font-mono mb-1">
-                Review & Submission Notes
-              </label>
-              <input
-                type="text"
-                placeholder="Notes for admin verification..."
-                value={formData.reviewNotes || ''}
-                onChange={(e) => setFormData({ ...formData, reviewNotes: e.target.value })}
-                className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:bg-white text-zinc-900"
-              />
-            </div>
-          )}
 
           {/* Footer */}
           <div className="pt-4 border-t border-zinc-200 flex items-center justify-end space-x-3">

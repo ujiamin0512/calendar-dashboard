@@ -29,7 +29,6 @@ export const InternModal: React.FC<InternModalProps> = ({
   const [formEmail, setFormEmail] = useState('');
   const [formRole, setFormRole] = useState<InternRole>('Lead Intern');
   const [formPhone, setFormPhone] = useState('');
-  const [formCapacity, setFormCapacity] = useState<number>(5);
   const [formSkills, setFormSkills] = useState('');
 
   if (!isOpen) return null;
@@ -41,7 +40,6 @@ export const InternModal: React.FC<InternModalProps> = ({
     setFormEmail(intern.email);
     setFormRole(intern.role);
     setFormPhone(intern.phone);
-    setFormCapacity(intern.dailyCapacity);
     setFormSkills(intern.skills.join(', '));
   };
 
@@ -52,7 +50,6 @@ export const InternModal: React.FC<InternModalProps> = ({
     setFormEmail('');
     setFormRole('Technical Intern');
     setFormPhone('+1 (555) 000-0000');
-    setFormCapacity(4);
     setFormSkills('AV Setup, Microphones, Zoom Logistics');
   };
 
@@ -79,7 +76,6 @@ export const InternModal: React.FC<InternModalProps> = ({
         role: formRole,
         avatar,
         phone: formPhone,
-        dailyCapacity: formCapacity,
         skills: skillsArray,
         status: 'active',
       });
@@ -91,7 +87,6 @@ export const InternModal: React.FC<InternModalProps> = ({
         role: formRole,
         avatar,
         phone: formPhone,
-        dailyCapacity: formCapacity,
         skills: skillsArray,
       });
       setEditingInternId(null);
@@ -112,7 +107,7 @@ export const InternModal: React.FC<InternModalProps> = ({
                 Interns & Trainer Roster Management
               </h2>
               <p className="text-xs text-zinc-500">
-                Manage dispatch capacity, roles, and assigned skill domains.
+                Manage roles and assigned skill domains.
               </p>
             </div>
           </div>
@@ -176,17 +171,6 @@ export const InternModal: React.FC<InternModalProps> = ({
                     <option value="Logistics Intern">Logistics Intern</option>
                     <option value="Assistant Trainer">Assistant Trainer</option>
                   </select>
-                </div>
-                <div>
-                  <label className="block text-zinc-600 font-medium mb-1">Max Daily Tasks Capacity</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="15"
-                    value={formCapacity}
-                    onChange={(e) => setFormCapacity(Number(e.target.value))}
-                    className="w-full px-3 py-1.5 bg-white border border-zinc-200 rounded-md focus:outline-none focus:ring-1 focus:ring-zinc-900"
-                  />
                 </div>
               </div>
 
@@ -270,10 +254,6 @@ export const InternModal: React.FC<InternModalProps> = ({
                         <span className="flex items-center space-x-1">
                           <Mail className="w-3 h-3 text-zinc-400" />
                           <span>{intern.email}</span>
-                        </span>
-                        <span>•</span>
-                        <span className="font-mono text-[11px]">
-                          Capacity: {intern.dailyCapacity} tasks/day
                         </span>
                       </div>
 
